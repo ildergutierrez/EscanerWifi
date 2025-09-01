@@ -106,7 +106,7 @@ if __name__ == "__main__":
                 print(f"Seguridad: {wifi[6]}\n")
                 print("-" * 40)
             print(f"Total de redes encontradas: {len(redes)}")
-            time.sleep(3)
+            time.sleep(1)
         except:
             print("Activa el wi-fi")
-            time.sleep(2)
+            time.sleep(1)

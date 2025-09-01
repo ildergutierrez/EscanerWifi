@@ -2,6 +2,7 @@ from os import system
 import pywifi
 from pywifi import const
 import time
+system("cls")
 
 # Librerías necesarias
 # pip install pywifi
@@ -86,27 +87,31 @@ def scan_wifi():
         banda = band_from_freq(freq_mhz)
         seguridad = akm_to_text(network.akm)
 
-        wifis.append([ssid, bssid, signal, freq_mhz, banda, canal, seguridad])
+        wifis.append({
+    'SSID': ssid,
+    'BSSID': bssid,
+    'Señal': signal,
+    'Frecuencia': freq_mhz,
+    'Banda': banda,
+    'Canal': canal,
+    'Seguridad': seguridad
+})
+
 
     return wifis
 
 # --- Main ---
-if __name__ == "__main__":
-    while True:
-        system("cls")
-        try:
-            redes = scan_wifi()
-            for wifi in redes:
-                print(f"SSID: {wifi[0]}")
-                print(f"BSSID (MAC): {wifi[1]}")
-                print(f"Señal: {wifi[2]} dBm")
-                print(f"Frecuencia: {wifi[3]} MHz")
-                print(f"Banda: {wifi[4]}")
-                print(f"Canal: {wifi[5]}")
-                print(f"Seguridad: {wifi[6]}\n")
-                print("-" * 40)
-            print(f"Total de redes encontradas: {len(redes)}")
-            time.sleep(1)
-        except:
-            print("Activa el wi-fi")
-            time.sleep(1)
+'''if __name__ == "__main__":
+    system("cls")
+    redes = scan_wifi()
+    for wifi in redes:
+        print(f"SSID: {wifi[0]}")
+        print(f"BSSID (MAC): {wifi[1]}")
+        print(f"Señal: {wifi[2]} dBm")
+        print(f"Frecuencia: {wifi[3]} MHz")
+        print(f"Banda: {wifi[4]}")
+        print(f"Canal: {wifi[5]}")
+        print(f"Seguridad: {wifi[6]}\n")
+        print("-" * 40)
+        print(f"Total de redes encontradas: {len(redes)}")
+            '''

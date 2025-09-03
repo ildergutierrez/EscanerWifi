@@ -26,7 +26,7 @@ def actualizar_escaneo():
 
             Tk.Label(
                 card, 
-                text=f"Señal: {r['Señal']} dBm | Canal: {r['Canal']} | Banda: {r['Banda']} | Seguridad: {r['Seguridad']}",
+                text=f"Señal: {r['Señal']} dBm | Canal: {r['Canal']} | Banda: {r['Banda']} | Seguridad: {r['Seguridad']} | MAC: {r['BSSID']}",
                 bg="#222", fg="white", anchor="w", font=("Consolas", 9)
             ).pack(fill="x", padx=5, pady=5)
         if not redes:

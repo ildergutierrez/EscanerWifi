@@ -82,7 +82,7 @@ def scan_wifi():
 
     for network in results:
         ssid = network.ssid
-        bssid = clean_bssid(network.bssid)
+        bssid = clean_bssid(network.bssid)  # Limpiar BSSID
         signal = network.signal
         freq_mhz = normalize_freq_mhz(network.freq)
         canal = freq_to_channel(freq_mhz)
@@ -100,7 +100,8 @@ def scan_wifi():
                 "Frecuencia": freq_mhz,
                 "Banda": banda,
                 "Canal": canal,
-                "Seguridad": seguridad
+                "Seguridad": seguridad,
+                
             })
 
     return wifis

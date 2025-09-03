@@ -71,11 +71,13 @@ def clean_bssid(bssid):
 # --- Escaneo WiFi ---
 def scan_wifi():
     wifis = []
+    seen = set()  # Para evitar duplicados
+
     wifi = pywifi.PyWiFi()
     iface = wifi.interfaces()[0]
 
     iface.scan()
-    # time.sleep(3)
+    time.sleep(1)
     results = iface.scan_results()
 
     for network in results:
@@ -87,16 +89,19 @@ def scan_wifi():
         banda = band_from_freq(freq_mhz)
         seguridad = akm_to_text(network.akm)
 
-        wifis.append({
-    'SSID': ssid,
-    'BSSID': bssid,
-    'Señal': signal,
-    'Frecuencia': freq_mhz,
-    'Banda': banda,
-    'Canal': canal,
-    'Seguridad': seguridad
-})
-
+        # Clave única para evitar duplicados
+        unique_key = (ssid, bssid, canal)
+        if unique_key not in seen:
+            seen.add(unique_key)
+            wifis.append({
+                "SSID": ssid,
+                "BSSID": bssid,
+                "Señal": signal,
+                "Frecuencia": freq_mhz,
+                "Banda": banda,
+                "Canal": canal,
+                "Seguridad": seguridad
+            })
 
     return wifis
 

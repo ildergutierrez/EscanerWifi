@@ -1,14 +1,21 @@
-# ui.py con PyQt6 (fondo negro + cards delineadas)
+# ui.py con PyQt6 (fondo negro + cards delineadas + muestra estimacion)
 import sys
+import os
+import json
+from collections import deque
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout,
-    QScrollArea, QGridLayout, QPushButton, QFrame, QDialog
+    QScrollArea, QGridLayout, QPushButton, QFrame, QDialog,
+    QTableWidget, QTableWidgetItem, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
-from main import scan_wifi
-import os, json
-from collections import deque
+
+from main import scan_wifi  # usa la función actualizada
+
+CARD_WIDTH = 220
+CARD_HEIGHT = 120
 
 def normalize_mac(mac):
     """Normaliza MAC a formato AA:BB:CC:DD:EE:FF en mayúsculas."""
@@ -31,7 +38,9 @@ def find_packets_matching_bssid(bssid, captures_dir="captures", max_matches=200,
         return []
 
     results = []
-    # listar archivos capture_*.jsonl ordenados por fecha descendente (nuevos primero)
+    if not os.path.isdir(captures_dir):
+        return results
+
     files = [f for f in os.listdir(captures_dir) if f.startswith("capture_") and f.endswith(".jsonl")]
     files = sorted(files, reverse=True)
     files = files[:files_to_scan]
@@ -49,15 +58,8 @@ def find_packets_matching_bssid(bssid, captures_dir="captures", max_matches=200,
                         continue
                     src = j.get("src_mac", "")
                     dst = j.get("dst_mac", "")
-                    # normalizar si vienen sin ':'
-                    if src:
-                        src_norm = normalize_mac(src)
-                    else:
-                        src_norm = None
-                    if dst:
-                        dst_norm = normalize_mac(dst)
-                    else:
-                        dst_norm = None
+                    src_norm = normalize_mac(src) if src else None
+                    dst_norm = normalize_mac(dst) if dst else None
                     if src_norm == norm or dst_norm == norm:
                         results.append(j)
                         if len(results) >= max_matches:
@@ -68,12 +70,7 @@ def find_packets_matching_bssid(bssid, captures_dir="captures", max_matches=200,
             continue
     return results
 
-
-CARD_WIDTH = 220
-CARD_HEIGHT = 120
-
-
-class Card(QFrame):  # Clase que representa una tarjeta de red WiFi
+class Card(QFrame):
     def __init__(self, red, parent=None):
         super().__init__(parent)
         self.red = red
@@ -93,15 +90,18 @@ class Card(QFrame):  # Clase que representa una tarjeta de red WiFi
         """)
 
         layout = QVBoxLayout()
-        ssid_label = QLabel(f"📶 {red['SSID']}")
+        ssid_label = QLabel(f"📶 {red.get('SSID', '')}")
         ssid_label.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-        ssid_label.setStyleSheet(f"color: {self.color_por_senal(red['Señal'])};")
+        ssid_label.setStyleSheet(f"color: {self.color_por_senal(red.get('Señal'))};")
         layout.addWidget(ssid_label)
 
+        # Mostrar señal y estimación en la card (si está disponible)
+       
+    
+
         info_label = QLabel(
-            f"Señal: {red['Señal']} dBm\n"
-            f"Canal: {red['Canal']} | {red['Banda']}\n"
-            f"Seguridad: {red['Seguridad']}"
+            f"Señal: {red.get('Señal')} dBm\n"
+            f"AKM: {red.get('Seguridad')}\n"
         )
         info_label.setFont(QFont("Consolas", 9))
         layout.addWidget(info_label)
@@ -110,45 +110,37 @@ class Card(QFrame):  # Clase que representa una tarjeta de red WiFi
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            dialog = DetalleDialog(self.red, self)
-            dialog.exec()
+            # Al hacer click, abrimos un diálogo con detalles y (si hay captures) paquetes relacionados
+            self.window().show_traffic_for_bssid(self.red.get("BSSID"), self.red)
+        else:
+            super().mousePressEvent(event)
 
     def color_por_senal(self, signal):
-        if signal >= -50: return "#4CAF50"
-        elif signal >= -70: return "#FFC107"
-        else: return "#F44336"
+        try:
+            if signal is None:
+                return "#9E9E9E"
+            if signal >= -50: return "#4CAF50"
+            elif signal >= -70: return "#FFC107"
+            else: return "#F44336"
+        except Exception:
+            return "#9E9E9E"
 
-
-class DetalleDialog(QDialog):  # Diálogo para mostrar detalles de la red
-    def __init__(self, red, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(f"Detalles de {red['SSID']}")
-        self.setFixedSize(400, 300)
-        layout = QVBoxLayout()
-        for k, v in red.items():
-            lbl = QLabel(f"{k}: {v}")
-            lbl.setStyleSheet("color: white;")
-            layout.addWidget(lbl)
-        self.setLayout(layout)
-        self.setStyleSheet("background-color: #000;")
-
-
-class MainWindow(QMainWindow):  # Clase principal de la ventana
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Escáner WiFi")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 600)
 
         self.container = QWidget()
         self.layout = QVBoxLayout(self.container)
 
         self.title = QLabel("Escáner WiFi")
         self.title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        self.title.setStyleSheet("color: white;") # Título principal
+        self.title.setStyleSheet("color: white;")
         self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.cantidad_label = QLabel("Cantidad de redes: 0") 
-        self.cantidad_label.setStyleSheet("color: white;")  # Etiqueta para mostrar la cantidad de redes
+        self.cantidad_label = QLabel("Cantidad de redes: 0")
+        self.cantidad_label.setStyleSheet("color: white;")
         self.cantidad_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.layout.addWidget(self.title)
@@ -182,6 +174,7 @@ class MainWindow(QMainWindow):  # Clase principal de la ventana
 
     def actualizar(self):
         try:
+            # llamamos scan_wifi() con los mismos supuestos por defecto; si quieres cambiarlos pásalos aquí
             self.redes = scan_wifi()
             self.cantidad_label.setText(f"Cantidad de redes: {len(self.redes)}")
             self.construir_cards()
@@ -190,7 +183,9 @@ class MainWindow(QMainWindow):  # Clase principal de la ventana
 
     def construir_cards(self):
         for i in reversed(range(self.grid.count())):
-            self.grid.itemAt(i).widget().setParent(None)
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
 
         ancho = self.scroll_content.width() or self.width()
         num_cols = max(1, ancho // CARD_WIDTH)
@@ -216,15 +211,144 @@ class MainWindow(QMainWindow):  # Clase principal de la ventana
         self.mostrar_todas_flag = True
         self.construir_cards()
 
+    # ----------------- Funcionalidad para mostrar tráfico relacionado -----------------
+    def show_traffic_for_bssid(self, bssid, red_meta=None):
+        """
+        Busca en captures/*.jsonl paquetes relacionados con bssid y muestra diálogo con
+        resumen y ejemplos. Si no hay captures o no hay coincidencias, muestra mensaje.
+        """
+        matches = []
+        if bssid:
+            matches = find_packets_matching_bssid(
+                bssid, captures_dir="captures", max_matches=200, files_to_scan=20
+            )
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"📡 Detalles - {red_meta.get('SSID') if red_meta else bssid}")
+        dlg.setMinimumSize(850, 550)
+        layout = QVBoxLayout()
+
+        # ---------- Tarjeta de información de la red ----------
+        if red_meta:
+            info_box = QFrame()
+            info_layout = QVBoxLayout()
+            info_box.setLayout(info_layout)
+            info_box.setStyleSheet("""
+                QFrame {
+                    background-color: #1e1e1e;
+                    border: 1px solid #444;
+                    border-radius: 10px;
+                    padding: 5px;
+                }
+                QLabel { color: #ddd; font-size: 14px; }
+            """)
+
+            title = QLabel("Información del Punto de Acceso")
+            title.setStyleSheet("color: #4FC3F7; font-weight: bold; font-size: 15px;")
+            info_layout.addWidget(title)
+
+            info_lines = [
+                f"🔹 SSID: {red_meta.get('SSID')}",
+                f"🔹 BSSID: {red_meta.get('BSSID')}",
+                f"📶 Señal: {red_meta.get('Señal')} dBm",
+                f"📡 Frecuencia: {red_meta.get('Frecuencia')} MHz",
+                f"🛰️ Banda: {red_meta.get('Banda')}",
+                f"📺 Canal: {red_meta.get('Canal')}",
+                f"🔒 AKM: {red_meta.get('Seguridad')}",
+                f"🛠️ Cifrado: {red_meta.get('Cifrado')}",
+                f"📡 Potencia de transmisión: {red_meta.get('TxPower_usado', 'Desconocida')} dBm",
+                f"📡 Exponente de pérdida: {red_meta.get('PathLossExp', 'Desconocido')} ",
+            ]
+
+            est = red_meta.get("Estimacion_m")
+            if est is not None:
+                info_lines.append(
+                    f"📏 Distancia Estimada: {est} metros" 
+                )
+
+            for line in info_lines:
+                lbl = QLabel(line)
+                info_layout.addWidget(lbl)
+
+            layout.addWidget(info_box)
+
+        # ---------- Tabla de tráfico ----------
+        layout.addSpacing(15)
+
+        if matches:
+            lbl = QLabel(f"📦 Paquetes encontrados: {len(matches)} (ejemplos)")
+            lbl.setStyleSheet("color: #4FC3F7; font-weight: bold; font-size: 14px;")
+            layout.addWidget(lbl)
+
+            table = QTableWidget()
+            table.setColumnCount(6)
+            table.setHorizontalHeaderLabels(
+                ["⏱ Tiempo", "📡 Src MAC", "📡 Dst MAC", "🌐 Src IP", "🌐 Dst IP", "⚡ Protocolo"]
+            )
+            table.setRowCount(len(matches))
+
+            for i, m in enumerate(matches):
+                table.setItem(i, 0, QTableWidgetItem(str(m.get("ts", ""))))
+                table.setItem(i, 1, QTableWidgetItem(str(m.get("src_mac", ""))))
+                table.setItem(i, 2, QTableWidgetItem(str(m.get("dst_mac", ""))))
+                table.setItem(i, 3, QTableWidgetItem(str(m.get("src_ip", ""))))
+                table.setItem(i, 4, QTableWidgetItem(str(m.get("dst_ip", ""))))
+                table.setItem(i, 5, QTableWidgetItem(str(m.get("l4", ""))))
+
+            table.resizeColumnsToContents()
+            table.setAlternatingRowColors(True)
+            table.setStyleSheet("""
+                QTableWidget {
+                    background-color: #121212;
+                    alternate-background-color: #1e1e1e;
+                    color: #ddd;
+                    gridline-color: #444;
+                    border: 1px solid #333;
+                    border-radius: 8px;
+                }
+                QHeaderView::section {
+                    background-color: #2c2c2c;
+                    color: #4FC3F7;
+                    font-weight: bold;
+                    padding: 6px;
+                    border: none;
+                }
+            """)
+            layout.addWidget(table)
+        else:
+            lbl = QLabel("⚠️ No se encontraron paquetes relacionados en 'captures/' (o no hay capturas).")
+            lbl.setStyleSheet("color: #f88; font-weight: bold; font-size: 13px;")
+            layout.addWidget(lbl)
+
+        # ---------- Botón ----------
+        layout.addSpacing(15)
+        btn = QPushButton("Cerrar")
+        btn.setFixedWidth(120)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4FC3F7;
+                color: black;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #81D4FA;
+            }
+        """)
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        dlg.setLayout(layout)
+        dlg.setStyleSheet("QDialog { background-color: #0d0d0d; }")
+        dlg.exec()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Fondo global negro
     app.setStyleSheet("""
         QMainWindow { background-color: #000; }
         QScrollArea { background-color: #000; }
         QWidget { background-color: #000; }
-        
     """)
     window = MainWindow()
     window.show()

@@ -1,0 +1,8 @@
+# Instalar todas las dependencias necesarias
+pip install requests pywifi PyQt6 mac-vendor-lookup
+
+# O instalar una por una:
+pip install requests     # Para consultas HTTP a la API
+pip install pywifi      # Para escaneo de redes WiFi
+pip install PyQt6       # Para la interfaz gráfica
+pip install mac-vendor-lookup  # Para identificar fabricantes por MAC

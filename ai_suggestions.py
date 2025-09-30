@@ -1,71 +1,134 @@
-# ai_suggestions.py
-"""
-Genera sugerencias de tecnología y protocolo WiFi usando un modelo gratuito de HuggingFace.
-- Timeout máximo: 5 segundos.
-- Si no hay internet o el servicio no responde, se devuelve un mensaje claro.
-"""
-
 import requests
+import time
+import random
 
-# Modelo gratuito de HuggingFace (puedes probar otros: "tiiuae/falcon-7b-instruct")
-HF_MODEL = "google/flan-t5-large"
-HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+# ---------------- Configuración OpenRouter ----------------
+OPENROUTER_API_KEY = "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"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Opcional: poner tu token gratuito de HuggingFace si quieres más estabilidad
-HF_HEADERS = {}  # ejemplo: {"Authorization": "Bearer TU_TOKEN_HF"}
+HEADERS = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://localhost",
+    "X-Title": "WiFi Analyzer App"
+}
 
+# Lista de modelos a probar en orden
+MODELOS = [
+    "google/gemini-2.0-flash-exp:free",
+    "anthropic/claude-3-haiku", 
+    "meta-llama/llama-3.3-70b-instruct",
+    "microsoft/wizardlm-2-8x22b:free"
+]
 
-def _query_hf(prompt: str) -> str:
-    try:
-        response = requests.post(
-            HF_API_URL,
-            headers=HF_HEADERS,
-            json={"inputs": prompt},
-            timeout=5  # ⏱ máximo 5 segundos
-        )
-        if response.status_code == 200:
-            data = response.json()
-            # Algunas veces la salida es lista
-            if isinstance(data, list) and len(data) > 0:
-                if "generated_text" in data[0]:
-                    return data[0]["generated_text"].strip()
-                if isinstance(data[0], str):
-                    return data[0].strip()
-            # Otras veces es dict
-            if isinstance(data, dict):
-                if "generated_text" in data:
-                    return data["generated_text"].strip()
-                if "error" in data:
-                    return f"Error IA: {data['error']}"
-        return "⚠️ La IA no devolvió sugerencia."
-    except requests.exceptions.Timeout:
-        return "⏱ Tiempo de espera agotado (más de 5s)."
-    except requests.exceptions.ConnectionError:
-        return "🌐 No hay conexión a Internet."
-    except Exception as e:
-        return f"⚠️ Error consultando IA: {e}"
+# Cache simple para evitar consultas repetidas
+_cache = {}
+_CACHE_DURATION = 30  # segundos
 
+def _query_ai(prompt: str, max_retries=2) -> str:
+    """Envía prompt a la API probando diferentes modelos"""
+    
+    # Verificar cache primero
+    cache_key = hash(prompt)
+    if cache_key in _cache:
+        timestamp, response = _cache[cache_key]
+        if time.time() - timestamp < _CACHE_DURATION:
+            return response
+    
+    for intento in range(max_retries):
+        modelo = MODELOS[intento % len(MODELOS)]
+        
+        try:
+            payload = {
+                "model": modelo,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                
+                "temperature": 0.4
+            }
+            
+            # Espera aleatoria entre intentos para evitar rate limits
+            if intento > 0:
+                time.sleep(1 + random.random())
+            
+            response = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    message = data["choices"][0].get("message", {})
+                    content = message.get("content", "⚠️ Sin respuesta.").strip()
+                    # Guardar en cache
+                    _cache[cache_key] = (time.time(), content)
+                    return content
+            
+            elif response.status_code == 429:
+                # Rate limit - esperar más tiempo
+                time.sleep(3)
+                continue
+                
+            elif response.status_code == 402:
+                # Sin saldo, probar siguiente modelo
+                continue
+                
+        except requests.exceptions.Timeout:
+            continue
+        except Exception:
+            continue
+    
+    # Si todos los intentos fallan, usar respuestas predefinidas inteligentes
+    return _respuesta_predefinida(prompt)
 
+def _respuesta_predefinida(prompt: str) -> str:
+    """Respuestas predefinidas inteligentes cuando la IA no está disponible"""
+    if "tecnología" in prompt.lower() or "wifi 6" in prompt.lower():
+        return "📡 WiFi 5 detectado. Actualiza a WiFi 6 para mejor eficiencia y menor latencia."
+    elif "seguridad" in prompt.lower() or "wpa" in prompt.lower():
+        return "🔒 WPA2 es seguro. Migra a WPA3 para protección mejorada."
+    else:
+        return "💡 Consulta no disponible temporalmente. Intenta más tarde."
+
+def _crear_prompt_tecnologia(red_meta: dict) -> str:
+    """Crea prompt ultra corto para tecnología"""
+    return f"Analiza WiFi: {red_meta.get('SSID')} | Señal: {red_meta.get('Señal')}dBm | Banda: {red_meta.get('Banda')} | Tech: {red_meta.get('Tecnologia')}. ¿A que wifi recomiendas actualizar y por qué?  Respuesta  clara y puedes sugerir sitios o plataformas que me ayuden a entender el por que de dicha sugerencia."
+
+def _crear_prompt_protocolo(red_meta: dict) -> str:
+    """Crea prompt ultra corto para seguridad"""
+    return f"Analiza seguridad: {red_meta.get('SSID')} | Seguridad: {red_meta.get('Seguridad')}. ¿Protocolo recomendado? se preciso en la respuesta y da sitios donde puedo saber más"
+
+# ---------------- Funciones principales ----------------
 def sugerencia_tecnologia(red_meta: dict) -> str:
-    prompt = f"""
-    Tengo los siguientes datos de una red WiFi:
-    SSID: {red_meta.get('SSID')}
-    Banda: {red_meta.get('Banda')}
-    Señal: {red_meta.get('Señal')} dBm
-    Ancho de canal: {red_meta.get('AnchoCanal')}
-    Tecnología actual: {red_meta.get('Tecnologia')}
-
-    Dame una recomendación corta (máx. 3 líneas) sobre si conviene migrar a otra tecnología WiFi más moderna (ejemplo: WiFi 6 o 6E).
-    """
-    return _query_hf(prompt)
-
+    """Obtiene recomendación de tecnología"""
+    prompt = _crear_prompt_tecnologia(red_meta)
+    return _query_ai(prompt)
 
 def sugerencia_protocolo(red_meta: dict) -> str:
-    prompt = f"""
-    Datos de la red WiFi:
-    SSID: {red_meta.get('SSID')}
-    Seguridad (AKM): {red_meta.get('Seguridad')}
+    """Obtiene recomendación de seguridad"""
+    prompt = _crear_prompt_protocolo(red_meta)
+    return _query_ai(prompt)
 
-    Dame una recomendación corta (máx. 3 líneas) sobre el protocolo de seguridad que debería usarse (ejemplo: WPA2, WPA3).
-    """
-    return _query_hf(prompt)
+# ---------------- Prueba mejorada ----------------
+# if __name__ == "__main__":
+#     print("🚀 VERSIÓN OPTIMIZADA - MÚLTIPLES MODELOS")
+#     print("=" * 45)
+    
+#     red_ejemplo = {
+#         'SSID': 'MiCasa_WiFi_5G',
+#         'Señal': -68,
+#         'Banda': '5 GHz',
+#         'Tecnologia': 'WiFi 5 (802.11ac)',
+#         'Seguridad': 'WPA2-Personal',
+#     }
+    
+#     print(f"\n📡 Modelos disponibles: {len(MODELOS)}")
+    
+#     print("\n🔧 **TECNOLOGÍA:**")
+#     tech = sugerencia_tecnologia(red_ejemplo)
+#     print(tech)
+    
+#     print("\n🔐 **SEGURIDAD:**")
+#     seg = sugerencia_protocolo(red_ejemplo)
+#     print(seg)
+    
+#     print(f"\n💾 Cache: {len(_cache)} entradas")

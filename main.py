@@ -19,11 +19,6 @@ except Exception:
     const = None
 
 # vendor_lookup debe existir (archivo separado). Si no, la app seguirá sin fabricante.
-try:
-    from vendor_lookup import get_vendor
-except Exception:
-    def get_vendor(_):
-        return "Desconocido"
 
 # limpiar pantalla (solo para ejecuciones en consola)
 try:
@@ -118,32 +113,120 @@ def akm_to_text(akm_list):
     return ", ".join(out) if out else "Desconocido"
 
 
-# ---------- Estimación de distancia (mejorada) ----------
+# ---------- Estimación de distancia MEJORADA ----------
 def fspl_1m_db(freq_mhz):
+    """Calcula la pérdida de trayectoria en espacio libre a 1 metro"""
     c = 3e8
     f_hz = float(freq_mhz) * 1e6
     return 20.0 * math.log10((4.0 * math.pi * 1.0 * f_hz) / c)
 
-
-def estimate_distance_meters(rssi_dbm, tx_power_dbm=20.0, freq_mhz=2412.0, path_loss_exp=3.2):
+def estimate_distance_realistic(rssi_dbm, freq_mhz=2412.0, environment="indoor"):
+    """
+    Calcula distancia basada en RSSI usando modelo mejorado con parámetros realistas
+    
+    Args:
+        rssi_dbm: Señal recibida en dBm
+        freq_mhz: Frecuencia en MHz
+        environment: Tipo de ambiente ("indoor", "outdoor", "free_space")
+    """
     try:
-        if rssi_dbm is None:
+        if rssi_dbm is None or rssi_dbm >= 0:
             return None
+            
+        # Parámetros REALES basados en equipos comerciales
         if freq_mhz is None or freq_mhz <= 0:
             freq_mhz = 2412.0
-        if rssi_dbm >= -20:
-            return 0.05
-        pl_d = float(tx_power_dbm) - float(rssi_dbm)
-        pl_1m = fspl_1m_db(freq_mhz)
-        exponent = (pl_d - pl_1m) / (10.0 * float(path_loss_exp))
+            
+        # Potencias de transmisión REALES según estándares y equipos
+        if 2400 <= freq_mhz <= 2500:  # 2.4 GHz
+            tx_power_dbm = 20.0  # Típico para routers 2.4GHz (100mW)
+            antenna_gain_tx = 2.0  # Ganancia típica antena router (2-3 dBi)
+            antenna_gain_rx = 0.0  # Ganancia antena dispositivo cliente
+        elif 5000 <= freq_mhz <= 5900:  # 5 GHz
+            tx_power_dbm = 23.0  # Típico para routers 5GHz (200mW)
+            antenna_gain_tx = 3.0  # Mayor ganancia en 5GHz
+            antenna_gain_rx = 0.0
+        elif 5925 <= freq_mhz <= 7125:  # 6 GHz
+            tx_power_dbm = 24.0  # WiFi 6E puede usar más potencia
+            antenna_gain_tx = 4.0
+            antenna_gain_rx = 0.0
+        else:
+            tx_power_dbm = 20.0
+            antenna_gain_tx = 2.0
+            antenna_gain_rx = 0.0
+        
+        # Exponentes de pérdida REALES según ambiente
+        if environment == "free_space":
+            path_loss_exp = 2.0  # Espacio libre (teórico)
+            shadow_margin = 0.0  # Sin desvanecimiento
+        elif environment == "outdoor":
+            path_loss_exp = 2.7  # Exterior con algunos obstáculos
+            shadow_margin = 5.0  # Margen por sombra
+        else:  # indoor (default)
+            path_loss_exp = 3.5  # Interior con paredes (más realista)
+            shadow_margin = 10.0  # Mayor margen por obstáculos
+        
+        # Ajustar exponente por frecuencia (mayor frecuencia = mayor atenuación)
+        if freq_mhz > 5000:  # 5 GHz y 6 GHz
+            path_loss_exp += 0.3  # Mayor atenuación en frecuencias altas
+            shadow_margin += 2.0
+        
+        # Pérdida a 1 metro (referencia)
+        loss_1m = fspl_1m_db(freq_mhz)
+        
+        # Potencia efectiva considerando ganancias de antena
+        effective_tx_power = tx_power_dbm + antenna_gain_tx + antenna_gain_rx
+        
+        # Pérdida total medida (considerando margen de sombra)
+        total_loss = float(effective_tx_power) - float(rssi_dbm) - shadow_margin
+        
+        # Fórmula de distancia realista
+        if total_loss <= loss_1m:
+            return 0.1  # Distancia mínima
+            
+        # Despejar distancia: d = 10^((PL(d) - PL(1m)) / (10 * n))
+        exponent = (total_loss - loss_1m) / (10.0 * path_loss_exp)
         distance = 10.0 ** exponent
+        
         if math.isnan(distance) or distance <= 0:
             return None
-        distance = max(0.05, min(distance, 1000.0))
-        return round(distance, 2)
+        
+        # Límites REALISTAS según ambiente y frecuencia
+        if environment == "indoor":
+            max_distance = 50.0  # Interior típico
+        elif environment == "outdoor":
+            max_distance = 150.0  # Exterior sin obstáculos
+        else:
+            max_distance = 300.0  # Espacio libre teórico
+        
+        # Reducir distancia máxima para frecuencias altas
+        if freq_mhz > 5000:
+            max_distance *= 0.7  # 30% menos en 5GHz
+        if freq_mhz > 5900:
+            max_distance *= 0.6  # 40% menos en 6GHz
+            
+        distance = max(0.1, min(distance, max_distance))
+        
+        return round(distance, 1)
+        
     except Exception:
         return None
 
+# ---------- Función para detectar ambiente automáticamente ----------
+def detect_environment(redes):
+    """
+    Detecta el tipo de ambiente basado en las redes escaneadas
+    """
+    if not redes:
+        return "indoor"
+    
+    # Contar redes fuertes (señal > -50 dBm)
+    strong_networks = sum(1 for net in redes if net.get("Señal", -100) > -50)
+    
+    if strong_networks >= 3:
+        return "indoor"  # Muchas redes fuertes = interior
+    else:
+        return "outdoor"  # Pocas redes = posible exterior
 
 # ---------- Inferencia de generación tecnológica ----------
 def infer_wifi_generation(freq_mhz):
@@ -191,11 +274,13 @@ def clean_bssid(bssid):
     return s
 
 
-# ---------- Escaneo principal ----------
-def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.2):
+# ---------- Escaneo principal MEJORADO ----------
+def scan_wifi_realistic(wait_time=1.2, environment="auto"):
     """
-    Escanea redes WiFi y devuelve lista de diccionarios con campos:
-    SSID, BSSID, Señal, Frecuencia, Banda, Canal, AnchoCanal, Seguridad, Tecnologia, Estimacion_m, Fabricante
+    Escanea redes WiFi con estimación de distancia REALISTA
+    Devuelve lista de diccionarios con campos:
+    SSID, BSSID, Señal, Frecuencia, Banda, Canal, AnchoCanal, Seguridad, 
+    Tecnologia, Estimacion_m, Ambiente
     """
     if pywifi is None:
         raise RuntimeError("pywifi no disponible. Instala 'pywifi' para usar scan_wifi().")
@@ -212,6 +297,8 @@ def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.
 
     redes = []
     seen = set()
+    
+    # Primera pasada: recolectar todas las redes básicas
     for net in results:
         ssid = net.ssid or "<Sin nombre>"
         raw_bssid = getattr(net, "bssid", "") or ""
@@ -234,13 +321,7 @@ def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.
             continue
         seen.add(key)
 
-        # estimación de distancia
-        est = estimate_distance_meters(signal, tx_power_dbm_default, freq or 2412.0, path_loss_exp_default)
-
         tecnologia = infer_wifi_generation(freq)
-
-        # fabricante (consulta externa o local)
-        fabricante = get_vendor(bssid)
 
         redes.append({
             "SSID": ssid,
@@ -251,25 +332,63 @@ def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.
             "Canal": canal,
             "AnchoCanal": ancho,
             "Seguridad": seguridad,
-            "Tecnologia": tecnologia,
+            "Tecnologia": tecnologia
+        })
+
+    # Detectar ambiente si es automático
+    if environment == "auto":
+        detected_env = detect_environment(redes)
+    else:
+        detected_env = environment
+
+    # Segunda pasada: calcular distancias con ambiente detectado
+    for red in redes:
+        est = estimate_distance_realistic(
+            red["Señal"], 
+            red["Frecuencia"] or 2412.0, 
+            detected_env
+        )
+        
+        # Agregar campos calculados
+        red.update({
             "Estimacion_m": est,
-            "TxPower_usado": tx_power_dbm_default,
-            "PathLossExp": path_loss_exp_default,
-            "Fabricante": fabricante
+            "Ambiente": detected_env
         })
 
     redes_sorted = sorted(redes, key=lambda x: x.get("Señal", -9999), reverse=True)
     return redes_sorted
+# Función original mantenida para compatibilidad
+def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.2):
+    """
+    Función legacy - usa scan_wifi_realistic por defecto
+    """
+    return scan_wifi_realistic(wait_time=wait_time, environment="auto")
 
 
 # Si ejecutas este archivo directamente, muestra un listado simple
-if __name__ == "__main__":
-    try:
-        redes = scan_wifi()
-        for r in redes:
-            print(
-                f"{r['SSID']} | {r['BSSID']} | Señal: {r['Señal']} dBm | {r['Tecnologia']} | "
-                f"Dist: {r['Estimacion_m']} m | AnchoCanal: {r['AnchoCanal']} | AKM: {r['Seguridad']} | fa: {r['Fabricante']}"
-            )
-    except Exception as e:
-        print("Error:", e)
+# if __name__ == "__main__":
+#     try:
+#         print("Escaneando redes WiFi con estimación realista...")
+#         redes = scan_wifi_realistic(environment="auto")
+        
+#         print(f"\n{'='*80}")
+#         print(f"ESCANEO COMPLETADO - {len(redes)} redes encontradas")
+#         print(f"Ambiente detectado: {redes[0]['Ambiente'] if redes else 'N/A'}")
+#         print(f"{'='*80}")
+        
+#         for i, r in enumerate(redes, 1):
+#             print(f"\n--- Red #{i} ---")
+#             print(f"SSID: {r['SSID']}")
+#             print(f"BSSID: {r['BSSID']}")
+#             print(f"Señal: {r['Señal']} dBm")
+#             print(f"Frecuencia: {r['Frecuencia']} MHz")
+#             print(f"Banda: {r['Banda']}")
+#             print(f"Canal: {r['Canal']}")
+#             print(f"Seguridad: {r['Seguridad']}")
+#             print(f"Ancho de canal: {r['AnchoCanal']}")
+#             print(f"Distancia estimada: {r['Estimacion_m']} metros")
+#             print(f"Tecnología: {r['Tecnologia']}")
+#             print(f"Ambiente: {r['Ambiente']}")
+            
+#     except Exception as e:
+#         print("Error durante el escaneo:", e)

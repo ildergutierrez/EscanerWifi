@@ -30,8 +30,8 @@ class SuggestionWindow(QDialog):
         self.setMinimumSize(600, 500)
         self.setStyleSheet("""
             QDialog {
-                background-color: #1a1a1a;
-                color: #e6e6e6;
+                background-color: #1E1E1E;
+                color: #E0E0E0;
                 border-radius: 12px;
             }
         """)
@@ -39,16 +39,16 @@ class SuggestionWindow(QDialog):
         layout = QVBoxLayout()
         self.setLayout(layout)
         
-        # Título con gradiente
+        # Título con estilo profesional
         title_lbl = QLabel(titulo)
-        title_lbl.setFont(QFont("Verdana", 16, QFont.Weight.Bold))
+        title_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title_lbl.setStyleSheet("""
             QLabel {
-                color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #FF6B6B, stop:0.5 #4ECDC4, stop:1 #45B7D1);
-                padding: 10px;
-                background-color: #2a2a2a;
+                color: #FFFFFF;
+                padding: 15px;
+                background-color: #2D2D2D;
                 border-radius: 8px;
+                border-left: 4px solid #0078D4;
             }
         """)
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -57,15 +57,15 @@ class SuggestionWindow(QDialog):
         # Área de texto scrollable
         text_area = QTextEdit()
         text_area.setReadOnly(True)
-        text_area.setFont(QFont("Verdana", 11))
+        text_area.setFont(QFont("Segoe UI", 10))
         text_area.setStyleSheet("""
             QTextEdit {
-                background-color: #2a2a2a;
-                color: #e6e6e6;
-                border: 2px solid #404040;
-                border-radius: 8px;
-                padding: 12px;
-                selection-background-color: #4ECDC4;
+                background-color: #2D2D2D;
+                color: #E0E0E0;
+                border: 1px solid #404040;
+                border-radius: 6px;
+                padding: 15px;
+                selection-background-color: #0078D4;
             }
         """)
         text_area.setText(texto)
@@ -77,35 +77,34 @@ class SuggestionWindow(QDialog):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-# ----------------- Configuración visual mejorada -----------------
-CARD_WIDTH = 300
-CARD_HEIGHT = 140
+# ----------------- Configuración visual profesional -----------------
+CARD_WIDTH = 320
+CARD_HEIGHT = 160
 
-COLOR_BG = "#0f0f0f"
-COLOR_CARD = "#1e1e1e"
-COLOR_CARD_BORDER = "#363636"
-COLOR_TEXT = "#f0f0f0"
-COLOR_ACCENT = "#4ECDC4"
-COLOR_GREEN = "#4CAF50"
-COLOR_YELLOW = "#FFC107"
-COLOR_RED = "#FF6B6B"
-COLOR_MUTED = "#888888"
-COLOR_PURPLE = "#9C27B0"
-COLOR_BLUE = "#2196F3"
-COLOR_ORANGE = "#FF9800"
+# Colores corporativos profesionales
+COLOR_BG = "#1E1E1E"          # Fondo principal oscuro
+COLOR_CARD = "#2D2D2D"        # Fondo de tarjetas
+COLOR_CARD_BORDER = "#404040" # Borde de tarjetas
+COLOR_TEXT = "#E0E0E0"        # Texto principal
+COLOR_ACCENT = "#0078D4"      # Azul corporativo
+COLOR_SUCCESS = "#107C10"     # Verde éxito
+COLOR_WARNING = "#D83B01"     # Naranja advertencia
+COLOR_ERROR = "#E81123"       # Rojo error
+COLOR_MUTED = "#848484"       # Texto secundario
 
+# Colores para estados de señal
 def signal_color_by_dbm(signal_dbm: Optional[float]) -> str:
     try:
         if signal_dbm is None:
             return COLOR_MUTED
         s = float(signal_dbm)
         if s >= -60:
-            return "#4CAF50"  # Verde brillante
+            return COLOR_SUCCESS  # Verde
         if s >= -70:
-            return "#FFC107"  # Amarillo
+            return "#FFB900"     # Amarillo corporativo
         if s >= -80:
-            return "#FF9800"  # Naranja
-        return "#FF5252"      # Rojo
+            return COLOR_WARNING  # Naranja
+        return COLOR_ERROR        # Rojo
     except Exception:
         return COLOR_MUTED
 
@@ -137,7 +136,7 @@ class SuggestionWorker(QThread):
             else:
                 result = sugerencia_protocolo(self.red_meta)
         except Exception as e:
-            result = f"⚠️ Error: {e}"
+            result = f"Error: {e}"
         
         if self._is_running:
             self.finished.emit(result)
@@ -179,47 +178,69 @@ class Card(QFrame):
         self.setFixedSize(CARD_WIDTH, CARD_HEIGHT)
         self.setStyleSheet(f"""
             QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {COLOR_CARD}, stop:1 #252525);
-                border-radius: 12px;
-                border: 2px solid {COLOR_CARD_BORDER};
+                background-color: {COLOR_CARD};
+                border-radius: 8px;
+                border: 1px solid {COLOR_CARD_BORDER};
             }}
-            QLabel {{ color: {COLOR_TEXT}; }}
+            QLabel {{
+                color: {COLOR_TEXT};
+                background-color: transparent;
+            }}
         """)
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout()
-        layout.setContentsMargins(15, 12, 15, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(6)
 
-        top_row = QHBoxLayout()
-        ssid_lbl = QLabel(self.red.get("SSID","<sin nombre>"))
-        ssid_lbl.setFont(QFont("Verdana", 13, QFont.Weight.Bold))
-        ssid_lbl.setStyleSheet(f"color:{COLOR_ACCENT}; background-color: transparent;")
-        top_row.addWidget(ssid_lbl, stretch=1)
+        # Header con SSID y señal
+        header_layout = QHBoxLayout()
+        
+        ssid_lbl = QLabel(self.red.get("SSID", "<sin nombre>"))
+        ssid_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        ssid_lbl.setStyleSheet(f"color: {COLOR_ACCENT};")
+        header_layout.addWidget(ssid_lbl, stretch=1)
 
-        color = signal_color_by_dbm(self.red.get("Señal"))
-        dot = QLabel("●")
-        dot.setStyleSheet(f"color:{color}; font-size:24px; background-color: transparent;")
-        top_row.addWidget(dot, alignment=Qt.AlignmentFlag.AlignRight)
-        layout.addLayout(top_row)
+        # Indicador de señal
+        signal = self.red.get("Señal")
+        signal_lbl = QLabel(f"{signal} dBm" if signal else "N/A")
+        signal_lbl.setFont(QFont("Segoe UI", 12))
+        signal_color = signal_color_by_dbm(signal)
+        signal_lbl.setStyleSheet(f"color: {signal_color}; font-weight: bold;")
+        header_layout.addWidget(signal_lbl)
 
-        sig = self.red.get("Señal")
-        est = self.red.get("Estimacion_m")
-        est_text = f" | 📏 {est}m" if est is not None else ""
-        info_lbl = QLabel(f"📶 Señal: {sig} dBm{est_text}")
-        info_lbl.setFont(QFont("Verdana", 10))
-        info_lbl.setStyleSheet("color:#dcdcdc; background-color: transparent;")
-        layout.addWidget(info_lbl)
+        layout.addLayout(header_layout)
 
-        sec = self.red.get("Seguridad","N/A")
-        ancho = self.red.get("AnchoCanal","Desconocido")
-        footer_lbl = QLabel(f"🔐 {sec}  •  📡 {ancho}")
-        footer_lbl.setFont(QFont("Verdana", 9))
-        footer_lbl.setStyleSheet("color:#bfbfbf; background-color: transparent;")
-        layout.addWidget(footer_lbl)
+        # Información de la red
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
 
+        # Frecuencia y Canal
+        freq = self.red.get("Frecuencia")
+        canal = self.red.get("Canal")
+        freq_text = f"{freq} MHz • Canal {canal}" if freq and canal else "Frecuencia no disponible"
+        freq_lbl = QLabel(f"📶 {freq_text}")
+        freq_lbl.setFont(QFont("Segoe UI", 12))
+        freq_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        info_layout.addWidget(freq_lbl)
+
+        # Seguridad
+        security = self.red.get("Seguridad", "N/A")
+        security_lbl = QLabel(f"🔐 {security}")
+        security_lbl.setFont(QFont("Segoe UI", 12))
+        security_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        info_layout.addWidget(security_lbl)
+
+        # Distancia estimada
+        distance = self.red.get("Estimacion_m")
+        if distance:
+            distance_lbl = QLabel(f"📏 ≈ {distance} metros")
+            distance_lbl.setFont(QFont("Segoe UI", 9))
+            distance_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+            info_layout.addWidget(distance_lbl)
+
+        layout.addLayout(info_layout)
         layout.addStretch()
         self.setLayout(layout)
 
@@ -229,38 +250,7 @@ class Card(QFrame):
         else:
             super().mousePressEvent(event)
 
-# ----------------- Botón con Efecto de Carga -----------------
-class LoadingButton(QPushButton):
-    def __init__(self, text="", parent=None):
-        super().__init__(text, parent)
-        self.normal_style = ""
-        self.loading_style = ""
-        self.is_loading = False
-        self.loading_animation = QPropertyAnimation(self, b"geometry")
-        self.loading_animation.setDuration(1000)
-        self.loading_animation.setLoopCount(-1)  # Loop infinito
-        
-    def start_loading(self):
-        """Iniciar efecto de carga"""
-        self.is_loading = True
-        self.setEnabled(False)
-        self.setCursor(QCursor(Qt.CursorShape.WaitCursor))
-        
-        # Animación de pulsación
-        original_geometry = self.geometry()
-        self.loading_animation.setStartValue(original_geometry)
-        self.loading_animation.setEndValue(original_geometry)
-        self.loading_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
-        self.loading_animation.start()
-        
-    def stop_loading(self):
-        """Detener efecto de carga"""
-        self.is_loading = False
-        self.setEnabled(True)
-        self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
-        self.loading_animation.stop()
-
-# ----------------- Diálogo de Detalles con Indicadores de Carga -----------------
+# ----------------- Diálogo de Detalles Profesional -----------------
 class NetworkDetailsDialog(QDialog):
     def __init__(self, bssid: str, red_meta: dict, parent=None):
         super().__init__(parent)
@@ -275,8 +265,8 @@ class NetworkDetailsDialog(QDialog):
         self.suggestion_workers = {}
         self.vendor_completed = False
         
-        self.setWindowTitle(f"🔍 Detalles - {red_meta.get('SSID', 'Red')}")
-        self.setMinimumSize(850, 600)
+        self.setWindowTitle(f"Análisis de Red - {red_meta.get('SSID', 'Red')}")
+        self.setMinimumSize(800, 650)
         self.setup_ui()
         
     def set_icon(self):
@@ -286,20 +276,19 @@ class NetworkDetailsDialog(QDialog):
             self.setWindowIcon(QIcon(icon_path))
         
     def setup_ui(self):
-        self.setStyleSheet("""
-            QDialog {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #1a1a1a, stop:1 #2d2d2d);
-                color: #e6e6e6;
-                border-radius: 15px;
-            }
-            * {
-                font-family: 'Verdana';
-            }
+        # Estilo profesional corporativo
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                font-family: 'Segoe UI';
+            }}
+            QFrame {{
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border: 1px solid {COLOR_CARD_BORDER};
+            }}
         """)
-        
-        # Cambiar cursor a espera durante operaciones
-        self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         
         outer_layout = QVBoxLayout()
         outer_layout.setContentsMargins(20, 20, 20, 20)
@@ -307,220 +296,160 @@ class NetworkDetailsDialog(QDialog):
         self.setLayout(outer_layout)
 
         # Título del diálogo
-        title_lbl = QLabel(f"📡 Análisis de Red: {self.red_meta.get('SSID', 'Desconocida')}")
-        title_lbl.setFont(QFont("Verdana", 16, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("""
-            QLabel {
-                color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4ECDC4, stop:1 #45B7D1);
-                padding: 12px;
-                background-color: #2a2a2a;
-                border-radius: 10px;
-                border: 2px solid #404040;
-            }
+        title_lbl = QLabel(f"Análisis de Red: {self.red_meta.get('SSID', 'Desconocida')}")
+        title_lbl.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        title_lbl.setStyleSheet(f"""
+            QLabel {{
+                color: #FFFFFF;
+                padding: 15px;
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border-left: 4px solid {COLOR_ACCENT};
+            }}
         """)
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         outer_layout.addWidget(title_lbl)
 
+        # Contenedor de información
         info_frame = QFrame()
-        info_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border-radius: 12px;
-                border: 2px solid #404040;
-            }
-            QLabel {
-                color: #e6e6e6;
-                background-color: transparent;
-            }
-        """)
         info_layout = QFormLayout()
         info_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         info_layout.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        info_layout.setHorizontalSpacing(25)
-        info_layout.setVerticalSpacing(10)
+        info_layout.setHorizontalSpacing(30)
+        info_layout.setVerticalSpacing(12)
         info_frame.setLayout(info_layout)
         outer_layout.addWidget(info_frame)
 
-        def make_value_label(text, color: Optional[str] = None):
+        def make_field_label(text):
+            """Crear etiqueta de campo con estilo profesional"""
+            lbl = QLabel(text)
+            lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            lbl.setStyleSheet(f"color: {COLOR_ACCENT};")
+            return lbl
+
+        def make_value_label(text):
+            """Crear etiqueta de valor con estilo profesional"""
             lbl = QLabel(str(text))
-            lbl.setFont(QFont("Verdana", 11))
-            lbl.setStyleSheet(f"color:{color or '#e6e6e6'}; background-color: transparent;")
+            lbl.setFont(QFont("Segoe UI", 10))
+            lbl.setStyleSheet(f"color: {COLOR_TEXT};")
+            lbl.setWordWrap(True)
             return lbl
 
         # Datos de la red
-        ssid = self.red_meta.get("SSID", "<sin nombre>")
-        signal = self.red_meta.get("Señal", None)
-        freq = self.red_meta.get("Frecuencia", None)
-        banda = self.red_meta.get("Banda", "Desconocida")
-        canal = self.red_meta.get("Canal", "Desconocido")
-        seguridad = self.red_meta.get("Seguridad", "Desconocido")
-        ancho = self.red_meta.get("AnchoCanal", "Desconocido")
-        est = self.red_meta.get("Estimacion_m", None)
-        tecnologia = self.red_meta.get("Tecnologia", "Desconocida")
+        datos = [
+            ("SSID", self.red_meta.get("SSID", "<sin nombre>")),
+            ("Dirección MAC", self.bssid),
+            ("Fabricante", "Buscando..."),
+            ("Intensidad de señal", f"{self.red_meta.get('Señal', 'N/A')} dBm"),
+            ("Frecuencia", f"{self.red_meta.get('Frecuencia', 'N/A')} MHz"),
+            ("Banda", self.red_meta.get("Banda", "Desconocida")),
+            ("Canal", self.red_meta.get("Canal", "Desconocido")),
+            ("Seguridad", self.red_meta.get("Seguridad", "Desconocido")),
+            ("Ancho de canal", self.red_meta.get("AnchoCanal", "Desconocido")),
+            ("Distancia estimada", f"≈ {self.red_meta.get('Estimacion_m', 'N/A')} metros"),
+            ("Tecnología", self.red_meta.get("Tecnologia", "Desconocida")),
+            ("Autenticación", self.red_meta.get("Autenticación", "Desconocida")),
+            ("Cifrado", self.red_meta.get("Cifrado", "Desconocida")),
+            ("Ambiente", self.red_meta.get("Ambiente", "Desconocido").capitalize()),
+        ]
 
-        # Datos básicos con emojis y colores
-        info_layout.addRow(QLabel("🔹 SSID:"), make_value_label(ssid, COLOR_ACCENT))
-        info_layout.addRow(QLabel("🔹 Dirección MAC:"), make_value_label(self.bssid, COLOR_MUTED))
-        
-        # Fabricante con indicador de carga
-        self.vendor_lbl = make_value_label("🔄 Buscando fabricante...", "#FFC107")
-        info_layout.addRow(QLabel("🏭 Fabricante:"), self.vendor_lbl)
+        # Añadir campos al layout
+        for field, value in datos:
+            if field == "Fabricante":
+                self.vendor_lbl = make_value_label("🔄 Buscando fabricante...")
+                info_layout.addRow(make_field_label(field + ":"), self.vendor_lbl)
+            elif field == "Intensidad de señal":
+                signal_lbl = make_value_label(value)
+                signal_color = signal_color_by_dbm(self.red_meta.get("Señal"))
+                signal_lbl.setStyleSheet(f"color: {signal_color}; font-weight: bold;")
+                info_layout.addRow(make_field_label(field + ":"), signal_lbl)
+            else:
+                info_layout.addRow(make_field_label(field + ":"), make_value_label(value))
 
-        sig_color = signal_color_by_dbm(signal)
-        sig_text = f"{signal} dBm" if signal is not None else "N/A"
-        info_layout.addRow(QLabel("📶 Intensidad de señal:"), make_value_label(sig_text, sig_color))
-        info_layout.addRow(QLabel("📡 Frecuencia:"), make_value_label(f"{freq} MHz" if freq else "N/A", COLOR_BLUE))
-        info_layout.addRow(QLabel("🛰️ Banda:"), make_value_label(banda, COLOR_PURPLE))
-        info_layout.addRow(QLabel("📺 Canal:"), make_value_label(canal, COLOR_ORANGE))
-        info_layout.addRow(QLabel("🔐 Seguridad:"), make_value_label(seguridad, COLOR_GREEN))
-        info_layout.addRow(QLabel("📶 Ancho de canal:"), make_value_label(ancho, COLOR_ACCENT))
-        dist_text = f"≈ {est} metros" if est is not None else "N/A"
-        info_layout.addRow(QLabel("📏 Distancia estimada:"), make_value_label(dist_text, "#4ECDC4"))
-        info_layout.addRow(QLabel("⚙️ Tecnología:"), make_value_label(tecnologia, "#FF6B6B"))
-        
-        # Estilo para las etiquetas de la izquierda
-        for row in range(info_layout.rowCount()):
-            label_widget = info_layout.itemAt(row, QFormLayout.ItemRole.LabelRole).widget()
-            if label_widget:
-                label_widget.setFont(QFont("Verdana", 11, QFont.Weight.Bold))
-                label_widget.setStyleSheet("color: #4ECDC4; background-color: transparent;")
+        # Botones de análisis
+        buttons_frame = QFrame()
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
+        buttons_frame.setLayout(buttons_layout)
 
-        # Botones de sugerencias con indicadores de carga
-        suger_frame = QFrame()
-        suger_frame.setStyleSheet("background-color: transparent;")
-        suger_layout = QHBoxLayout()
-        suger_layout.setSpacing(15)
-        suger_frame.setLayout(suger_layout)
+        # Botón de análisis de tecnología
+        self.btn_tecn = QPushButton("🔍 Análisis de Tecnología")
+        self.btn_tecn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.btn_tecn.setMinimumHeight(45)
+        self.btn_tecn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #106EBE;
+            }}
+            QPushButton:pressed {{
+                background-color: #005A9E;
+            }}
+            QPushButton:disabled {{
+                background-color: #505050;
+                color: #A0A0A0;
+            }}
+        """)
 
-        # Botón de tecnología con efecto de carga
-        self.btn_tecn = QPushButton("🔧 Sugerencia de Tecnología")
-        self.btn_tecn.setFont(QFont("Verdana", 12, QFont.Weight.Bold))
-        self.btn_tecn.setMinimumHeight(50)
-        
-        # Botón de protocolo con efecto de carga
-        self.btn_proto = QPushButton("🔐 Sugerencia de Protocolo")
-        self.btn_proto.setFont(QFont("Verdana", 12, QFont.Weight.Bold))
-        self.btn_proto.setMinimumHeight(50)
+        # Botón de análisis de protocolo
+        self.btn_proto = QPushButton("🔒 Análisis de Protocolo")
+        self.btn_proto.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.btn_proto.setMinimumHeight(45)
+        self.btn_proto.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_SUCCESS};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #0E6C0E;
+            }}
+            QPushButton:pressed {{
+                background-color: #0C5C0C;
+            }}
+            QPushButton:disabled {{
+                background-color: #505050;
+                color: #A0A0A0;
+            }}
+        """)
+
+        buttons_layout.addWidget(self.btn_tecn)
+        buttons_layout.addWidget(self.btn_proto)
+        outer_layout.addWidget(buttons_frame)
 
         # Conectar señales
         self.btn_tecn.clicked.connect(lambda: self._handle_sugerencia("tecnologia"))
         self.btn_proto.clicked.connect(lambda: self._handle_sugerencia("protocolo"))
 
-        suger_layout.addWidget(self.btn_tecn)
-        suger_layout.addWidget(self.btn_proto)
-        outer_layout.addWidget(suger_frame)
-
         # Iniciar búsqueda de fabricante
         self._start_vendor_lookup()
 
     def _update_buttons_state(self):
-        """Actualizar estado de los botones según disponibilidad"""
+        """Actualizar estado de los botones"""
         vendor_ready = self.vendor_completed
         has_active_suggestions = any(worker.isRunning() for worker in self.suggestion_workers.values())
         
+        self.btn_tecn.setEnabled(vendor_ready and not has_active_suggestions)
+        self.btn_proto.setEnabled(vendor_ready and not has_active_suggestions)
+
         if not vendor_ready:
-            # Fabricante aún no listo
-            style_disabled = """
-                QPushButton {
-                    background-color: #555555;
-                    color: #999999;
-                    padding: 12px 20px;
-                    border-radius: 10px;
-                    border: 2px solid #666666;
-                    font-weight: bold;
-                }
-            """
-            self.btn_tecn.setStyleSheet(style_disabled)
-            self.btn_proto.setStyleSheet(style_disabled)
-            self.btn_tecn.setEnabled(False)
-            self.btn_proto.setEnabled(False)
             self.btn_tecn.setText("⏳ Esperando fabricante...")
             self.btn_proto.setText("⏳ Esperando fabricante...")
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
-            
         elif has_active_suggestions:
-            # Sugerencia en proceso - Efecto de carga activo
-            style_loading = """
-                QPushButton {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #FFD700, stop:0.5 #FFA500, stop:1 #FFD700);
-                    color: #000000;
-                    padding: 12px 20px;
-                    border-radius: 10px;
-                    border: 2px solid #FFC107;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #FFD700, stop:0.5 #FFA500, stop:1 #FFD700);
-                }
-            """
-            self.btn_tecn.setStyleSheet(style_loading)
-            self.btn_proto.setStyleSheet(style_loading)
-            self.btn_tecn.setEnabled(False)
-            self.btn_proto.setEnabled(False)
-            
-            # Determinar qué botón está cargando
-            if "tecnologia" in self.suggestion_workers and self.suggestion_workers["tecnologia"].isRunning():
-                self.btn_tecn.setText("🔄 Consultando IA...")
-                self.btn_proto.setText("⏸️ Esperando...")
-            elif "protocolo" in self.suggestion_workers and self.suggestion_workers["protocolo"].isRunning():
-                self.btn_tecn.setText("⏸️ Esperando...")
-                self.btn_proto.setText("🔄 Consultando IA...")
-            
-            # Cambiar cursor a espera
-            self.setCursor(QCursor(Qt.CursorShape.WaitCursor))
-            
+            self.btn_tecn.setText("🔄 Analizando...")
+            self.btn_proto.setText("🔄 Analizando...")
         else:
-            # Listos para usar
-            style_tecn = """
-                QPushButton {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #4ECDC4, stop:1 #45B7D1);
-                    color: white;
-                    padding: 12px 20px;
-                    border-radius: 10px;
-                    border: 2px solid #5CDBD3;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #3DBBB3, stop:1 #35A7C1);
-                    border: 2px solid #4ECDC4;
-                }
-                QPushButton:pressed {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #2CA9A1, stop:1 #2597B1);
-                }
-            """
-            style_proto = """
-                QPushButton {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #FF6B6B, stop:1 #FF8E53);
-                    color: white;
-                    padding: 12px 20px;
-                    border-radius: 10px;
-                    border: 2px solid #FF8A80;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #FF5252, stop:1 #FF7B42);
-                    border: 2px solid #FF6B6B;
-                }
-                QPushButton:pressed {
-                    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #FF4040, stop:1 #FF6B35);
-                }
-            """
-            self.btn_tecn.setStyleSheet(style_tecn)
-            self.btn_proto.setStyleSheet(style_proto)
-            self.btn_tecn.setEnabled(True)
-            self.btn_proto.setEnabled(True)
-            self.btn_tecn.setText("🔧 Sugerencia de Tecnología")
-            self.btn_proto.setText("🔐 Sugerencia de Protocolo")
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            self.btn_tecn.setText("🔍 Análisis de Tecnología")
+            self.btn_proto.setText("🔒 Análisis de Protocolo")
 
     def _start_vendor_lookup(self):
         """Iniciar búsqueda de fabricante"""
@@ -540,79 +469,43 @@ class NetworkDetailsDialog(QDialog):
     def _handle_sugerencia(self, tipo):
         """Manejar solicitud de sugerencia"""
         if not self.vendor_completed:
-            QMessageBox.information(self, "⏳ Espera requerida", 
-                                  "Por favor espera a que termine la búsqueda del fabricante antes de solicitar sugerencias.")
             return
 
-        # Verificar si ya hay un thread activo para este tipo
         if tipo in self.suggestion_workers and self.suggestion_workers[tipo].isRunning():
-            QMessageBox.information(self, "🔄 En progreso", 
-                                  f"Ya hay una solicitud de {tipo} en proceso. Espera a que termine.")
             return
 
-        # Crear y configurar worker
         worker = SuggestionWorker(self.red_meta, tipo)
         self.suggestion_workers[tipo] = worker
         
         worker.finished.connect(lambda result: self._on_suggestion_finished(tipo, result))
         worker.finished.connect(worker.deleteLater)
         
-        # Actualizar UI con efectos de carga
         self._update_buttons_state()
-        
-        # Iniciar worker
         worker.start()
-
-        # Mostrar mensaje de confirmación
-        msg = QMessageBox(self)
-        msg.setWindowTitle("🔄 Consulta Iniciada")
-        msg.setText(f"Se está generando la sugerencia de {tipo}. Por favor espera...")
-        msg.setIcon(QMessageBox.Icon.Information)
-        # Aplicar color blanco al texto
-        msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #FFFFFF;   /* Fondo oscuro */
-                color: white;                /* Texto blanco */
-            }
-            QPushButton {
-                background-color: #4FC3F7;
-                color: #0b0b0b;
-                padding: 6px 12px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #29B6F6;
-            }
-        """)
-        msg.exec()
 
     def _on_suggestion_finished(self, tipo, result):
         """Callback cuando termina una sugerencia"""
-        # Remover worker de la lista
         if tipo in self.suggestion_workers:
             del self.suggestion_workers[tipo]
         
-        # Mostrar resultado en ventana emergente
-        suggestion_dialog = SuggestionWindow(f"💡 Sugerencia de {tipo}", result, parent=self)
+        titulo = "Análisis de Tecnología" if tipo == "tecnologia" else "Análisis de Protocolo"
+        suggestion_dialog = SuggestionWindow(titulo, result, parent=self)
         suggestion_dialog.exec()
         
-        # Actualizar botones
         self._update_buttons_state()
 
     def closeEvent(self, event):
-        """Manejar cierre del diálogo - detener todos los threads"""
-        # Detener vendor worker
+        """Manejar cierre del diálogo"""
         if self.vendor_worker and self.vendor_worker.isRunning():
             self.vendor_worker.stop()
         
-        # Detener suggestion workers
         for worker in self.suggestion_workers.values():
             if worker.isRunning():
                 worker.stop()
         
         event.accept()
 
-# ----------------- Main Window Mejorada -----------------
+# ----------------- Main Window Profesional -----------------
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -620,8 +513,8 @@ class MainWindow(QMainWindow):
         # Establecer icono
         self.set_icon()
         
-        self.setWindowTitle("Escáner WiFi Avanzado")
-        self.setMinimumSize(1100, 700)
+        self.setWindowTitle("Escáner WiFi Corporativo")
+        self.setMinimumSize(1200, 800)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -629,112 +522,93 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        APP_FONT = "Verdana"
-
-        # Título principal con gradiente
-        title = QLabel("Escáner WiFi Avanzado")
-        title.setFont(QFont(APP_FONT, 24, QFont.Weight.Bold))
-        title.setStyleSheet("""
-            QLabel {
-                color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4ECDC4, stop:0.5 #45B7D1, stop:1 #FF6B6B);
-                padding: 15px;
-                background-color: #2a2a2a;
-                border-radius: 12px;
-                border: 3px solid #404040;
-            }
+        # Título principal
+        title = QLabel("Escáner WiFi Corporativo")
+        title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+        title.setStyleSheet(f"""
+            QLabel {{
+                color: #FFFFFF;
+                padding: 20px;
+                background-color: {COLOR_CARD};
+                border-radius: 8px;
+                border-bottom: 4px solid {COLOR_ACCENT};
+            }}
         """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(title)
 
         # Contador de redes
-        self.cantidad_label = QLabel("📊 Cantidad de redes: 0")
-        self.cantidad_label.setFont(QFont(APP_FONT, 14))
-        self.cantidad_label.setStyleSheet("""
-            QLabel {
-                color: #4ECDC4;
-                padding: 8px;
-                background-color: #2a2a2a;
-                border-radius: 8px;
-                border: 2px solid #404040;
-            }
+        self.cantidad_label = QLabel("Redes detectadas: 0")
+        self.cantidad_label.setFont(QFont("Segoe UI", 12))
+        self.cantidad_label.setStyleSheet(f"""
+            QLabel {{
+                color: {COLOR_TEXT};
+                padding: 10px;
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border-left: 3px solid {COLOR_SUCCESS};
+            }}
         """)
         self.cantidad_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.cantidad_label)
 
-        # Botón Ver todas
-        self.btn_ver_todas = QPushButton("🔍 Ver todas las redes")
-        self.btn_ver_todas.setFont(QFont(APP_FONT, 14, QFont.Weight.Bold))
-        self.btn_ver_todas.setStyleSheet("""
-            QPushButton {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #9C27B0, stop:1 #E91E63);
-                color: white;
-                padding: 15px 25px;
-                border-radius: 10px;
-                border: 2px solid #BA68C8;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #8E24AA, stop:1 #D81B60);
-            }
-            QPushButton:pressed {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #7B1FA2, stop:1 #C2185B);
-            }
-        """)
-        self.btn_ver_todas.clicked.connect(self.mostrar_todas)
-        self.btn_ver_todas.hide()
-        main_layout.addWidget(self.btn_ver_todas, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Área de scroll con estilo
+        # Área de scroll
         self.scroll = QScrollArea()
-        self.scroll.setStyleSheet("""
-            QScrollArea {
-                background-color: #1a1a1a;
-                border: 2px solid #404040;
-                border-radius: 12px;
-            }
-            QScrollBar:vertical {
-                background-color: #2a2a2a;
-                width: 15px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #4ECDC4;
+        self.scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {COLOR_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
                 border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #3DBBB3;
-            }
+            }}
+            QScrollBar:vertical {{
+                background-color: {COLOR_CARD};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {COLOR_ACCENT};
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: #106EBE;
+            }}
         """)
         self.scroll.setWidgetResizable(True)
         self.scroll_content = QWidget()
-        self.scroll_content.setStyleSheet("background-color: #1a1a1a;")
+        self.scroll_content.setStyleSheet(f"background-color: {COLOR_BG};")
         self.grid = QGridLayout(self.scroll_content)
-        self.grid.setContentsMargins(15, 15, 15, 15)
+        self.grid.setContentsMargins(20, 20, 20, 20)
         self.grid.setHorizontalSpacing(20)
         self.grid.setVerticalSpacing(20)
         self.scroll.setWidget(self.scroll_content)
         main_layout.addWidget(self.scroll)
 
+        # Mensaje de escaneo inicial
+        self.scanning_label = QLabel("Escaneando redes WiFi...")
+        self.scanning_label.setFont(QFont("Segoe UI", 14))
+        self.scanning_label.setStyleSheet(f"""
+            QLabel {{
+                color: {COLOR_MUTED};
+                padding: 30px;
+                background-color: {COLOR_CARD};
+                border-radius: 8px;
+                border: 2px dashed {COLOR_CARD_BORDER};
+            }}
+        """)
+        self.scanning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.grid.addWidget(self.scanning_label, 0, 0, 1, 1)
+
         self.redes = []
-        self.mostrar_todas_flag = False
+        self.is_first_scan = True
 
         # Timer para escaneo automático
         self.timer = QTimer()
         self.timer.timeout.connect(self.lanzar_scan)
-        self.timer.start(2000)
+        self.timer.start(3000)
         self.lanzar_scan()
 
-        # Estilo principal de la ventana
-        self.setStyleSheet(f"""
-            QMainWindow {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {COLOR_BG}, stop:1 #1a1a1a);
-            }}
-        """)
+        # Estilo principal
+        self.setStyleSheet(f"QMainWindow {{ background-color: {COLOR_BG}; }}")
 
     def set_icon(self):
         """Establecer el icono de la ventana principal"""
@@ -743,46 +617,64 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
 
     def lanzar_scan(self):
-        self.scan_worker = ScanWorker()
-        self.scan_worker.finished.connect(self._scan_done)
-        self.scan_worker.start()
+        """Iniciar escaneo de redes"""
+        if not hasattr(self, 'scan_worker') or not self.scan_worker.isRunning():
+            self.scan_worker = ScanWorker()
+            self.scan_worker.finished.connect(self._scan_done)
+            self.scan_worker.start()
 
     def _scan_done(self, redes):
+        """Callback cuando termina el escaneo"""
         self.redes = redes
-        self.cantidad_label.setText(f"📊 Cantidad de redes: {len(redes)}")
+        self.cantidad_label.setText(f"Redes detectadas: {len(redes)}")
+        
+        if self.is_first_scan and redes:
+            self.scanning_label.hide()
+            self.is_first_scan = False
+        
         self.construir_cards()
 
     def construir_cards(self):
+        """Construir las tarjetas de redes"""
+        # Limpiar el layout
         for i in reversed(range(self.grid.count())):
             w = self.grid.itemAt(i).widget()
             if w: 
                 w.setParent(None)
 
+        # Si no hay redes, mostrar mensaje
+        if not self.redes:
+            no_networks_label = QLabel("Escaneando Redes Wifi Cercanas, Esto Podria Demorar Unos Segundos")
+            no_networks_label.setFont(QFont("Segoe UI", 13))
+            no_networks_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {COLOR_MUTED};
+                    padding: 40px;
+                    background-color: {COLOR_CARD};
+                    border-radius: 8px;
+                    border: 2px dashed {COLOR_CARD_BORDER};
+                }}
+            """)
+            no_networks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(no_networks_label, 0, 0, 1, 1)
+            return
+        
+        # Calcular número de columnas
         ancho_px = max(1, self.scroll_content.width() or self.width())
         num_cols = max(1, ancho_px // (CARD_WIDTH + 30))
-        max_cards = num_cols * 3
-        redes_mostrar = self.redes
-        if not self.mostrar_todas_flag and len(self.redes) > max_cards:
-            redes_mostrar = self.redes[:max_cards]
-            self.btn_ver_todas.show()
-        else:
-            self.btn_ver_todas.hide()
-
-        for idx, r in enumerate(redes_mostrar):
+        
+        # Añadir tarjetas
+        for idx, red in enumerate(self.redes):
             row, col = divmod(idx, num_cols)
-            card = Card(r)
+            card = Card(red)
             self.grid.addWidget(card, row, col)
 
     def resizeEvent(self, event):
         self.construir_cards()
         return super().resizeEvent(event)
 
-    def mostrar_todas(self):
-        self.mostrar_todas_flag = True
-        self.construir_cards()
-
     def show_traffic_for_bssid(self, bssid: str, red_meta: dict = None):
-        """Mostrar diálogo de detalles con gestión propia de threads"""
+        """Mostrar diálogo de detalles"""
         dialog = NetworkDetailsDialog(bssid, red_meta or {}, self)
         dialog.exec()
 
@@ -790,24 +682,22 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Establecer icono para toda la aplicación
+    # Establecer estilo de aplicación
+    app.setStyle('Fusion')
+    
+    # Establecer icono
     icon_path = os.path.join(os.path.dirname(__file__), "wifi.png")
     if os.path.exists(icon_path):
-        # Método 1: Establecer para toda la aplicación
         app.setWindowIcon(QIcon(icon_path))
         
-        # Método 2: Truco para forzar el icono en la barra de tareas
+        # Forzar icono en la barra de tareas (Windows)
         import ctypes
-        myappid = 'escaner.wifi.avanzado.1.0'  # ID único arbitrario
+        myappid = 'corporate.wifi.scanner.1.0'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     
     window = MainWindow()
-    
-    # Método 3: Establecer icono específicamente en la ventana principal
-    if os.path.exists(icon_path):
-        window.setWindowIcon(QIcon(icon_path))
-    
     window.show()
     sys.exit(app.exec())
+
 if __name__ == "__main__":
     main()

@@ -1,5 +1,7 @@
 import sys
 import os
+import subprocess
+import platform
 from typing import Optional
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout,
@@ -9,13 +11,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QCursor
 from PyQt6.QtGui import QMouseEvent
-
+from librerias import verificar_librerias
 from main import scan_wifi
 from ai_suggestions import sugerencia_tecnologia, sugerencia_protocolo
 
 try:
     from vendor_lookup import get_vendor
-except Exception:
+except Exception as e:
+    print(f"Error cargando vendor_lookup: {e}")
     def get_vendor(_):
         return "Desconocido"
 
@@ -142,9 +145,14 @@ class SuggestionWorker(QThread):
             self.finished.emit(result)
     
     def stop(self):
+        """Detener el worker de manera segura"""
         self._is_running = False
-        self.quit()
-        self.wait(1000)
+        if self.isRunning():
+            self.quit()
+            self.wait(1000)  # Esperar hasta 1 segundo
+            if self.isRunning():
+                self.terminate()  # Forzar terminación si no responde
+                self.wait(1000)
 
 class VendorWorker(QThread):
     finished = pyqtSignal(str)
@@ -158,18 +166,30 @@ class VendorWorker(QThread):
         if not self._is_running:
             return
         try:
+            # Pequeña pausa para evitar sobrecarga
+            self.msleep(100)
+            
+            if not self._is_running:
+                return
+                
             vendor = get_vendor(self.bssid)
-            # print("Fabricado:",vendor,"Mac",self.bssid)
-        except Exception:
-            vendor = "Desconocido"
-        
-        if self._is_running:
-            self.finished.emit(vendor)
+            
+            if self._is_running:
+                self.finished.emit(vendor)
+                
+        except Exception as e:
+            print(f"Error en VendorWorker: {e}")
+            if self._is_running:
+                self.finished.emit("Error en consulta")
     
     def stop(self):
+        """Detener el worker de manera segura"""
         self._is_running = False
-        self.quit()
-        self.wait(1000)
+        if self.isRunning():
+            self.quit()
+            if not self.wait(1000):  # Esperar hasta 1 segundo
+                self.terminate()
+                self.wait(1000)
 
 # ----------------- UI Elements -----------------
 class Card(QFrame):
@@ -258,13 +278,14 @@ class NetworkDetailsDialog(QDialog):
         self.bssid = bssid
         self.red_meta = red_meta
         
-        # Establecer icono
-        self.set_icon()
-        
         # Control de threads activos
         self.vendor_worker = None
         self.suggestion_workers = {}
         self.vendor_completed = False
+        self._is_closing = False  # Bandera para controlar cierre
+        
+        # Establecer icono
+        self.set_icon()
         
         self.setWindowTitle(f"Análisis de Red - {red_meta.get('SSID', 'Red')}")
         self.setMinimumSize(800, 650)
@@ -462,14 +483,15 @@ class NetworkDetailsDialog(QDialog):
 
     def _on_vendor_finished(self, vendor):
         """Callback cuando termina la búsqueda de fabricante"""
-        self.vendor_lbl.setText(vendor)
-        self.vendor_completed = True
-        self.vendor_worker = None
-        self._update_buttons_state()
+        if not self._is_closing:
+            self.vendor_lbl.setText(vendor)
+            self.vendor_completed = True
+            self.vendor_worker = None
+            self._update_buttons_state()
 
     def _handle_sugerencia(self, tipo):
         """Manejar solicitud de sugerencia"""
-        if not self.vendor_completed:
+        if not self.vendor_completed or self._is_closing:
             return
 
         if tipo in self.suggestion_workers and self.suggestion_workers[tipo].isRunning():
@@ -486,23 +508,32 @@ class NetworkDetailsDialog(QDialog):
 
     def _on_suggestion_finished(self, tipo, result):
         """Callback cuando termina una sugerencia"""
-        if tipo in self.suggestion_workers:
+        if not self._is_closing and tipo in self.suggestion_workers:
             del self.suggestion_workers[tipo]
-        
-        titulo = "Análisis de Tecnología" if tipo == "tecnologia" else "Análisis de Protocolo"
-        suggestion_dialog = SuggestionWindow(titulo, result, parent=self)
-        suggestion_dialog.exec()
-        
-        self._update_buttons_state()
+            self._update_buttons_state()
+            
+            # Solo mostrar el diálogo si no estamos cerrando
+            if not self._is_closing:
+                titulo = "Análisis de Tecnología" if tipo == "tecnologia" else "Análisis de Protocolo"
+                suggestion_dialog = SuggestionWindow(titulo, result, parent=self)
+                suggestion_dialog.exec()
 
     def closeEvent(self, event):
-        """Manejar cierre del diálogo"""
+        """Manejar cierre del diálogo - DETENER TODOS LOS WORKERS"""
+        self._is_closing = True
+        
+        # Detener worker de fabricante
         if self.vendor_worker and self.vendor_worker.isRunning():
             self.vendor_worker.stop()
         
-        for worker in self.suggestion_workers.values():
-            if worker.isRunning():
+        # Detener todos los workers de sugerencias
+        for tipo, worker in self.suggestion_workers.items():
+            if worker and worker.isRunning():
                 worker.stop()
+        
+        # Limpiar referencias
+        self.vendor_worker = None
+        self.suggestion_workers.clear()
         
         event.accept()
 
@@ -516,6 +547,9 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle("Escáner WiFi Corporativo")
         self.setMinimumSize(1200, 800)
+
+        # Control de diálogos activos
+        self.active_dialog = None
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -617,6 +651,54 @@ class MainWindow(QMainWindow):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
+    def closeEvent(self, event):
+        """
+        Manejar cierre de la aplicación principal.
+        Limpia la consola antes de cerrar.
+        """
+        print("🔒 Cerrando aplicación...")
+        
+        # Detener timer de escaneo
+        if hasattr(self, 'timer') and self.timer.isActive():
+            self.timer.stop()
+        
+        # Detener worker de escaneo si está activo
+        if hasattr(self, 'scan_worker') and self.scan_worker.isRunning():
+            self.scan_worker.quit()
+            self.scan_worker.wait(1000)
+        
+        # Cerrar diálogo activo si existe
+        if self.active_dialog and self.active_dialog.isVisible():
+            self.active_dialog.close()
+        
+        # Limpiar consola
+        self._clear_console()
+        
+        print("👋 Aplicación cerrada correctamente")
+        event.accept()
+
+    def _clear_console(self):
+        """Limpiar la consola según el sistema operativo"""
+        try:
+            system = platform.system().lower()
+            
+            if system == "windows":
+                # Windows - usar cls
+                subprocess.call('cls', shell=True)
+            elif system in ["linux", "darwin"]:  # Darwin es macOS
+                # Linux/macOS - usar clear
+                subprocess.call('clear', shell=True)
+            else:
+                # Sistema no reconocido - imprimir líneas en blanco
+                print('\n' * 50)
+                
+            print("🖥️  Consola limpiada")
+            
+        except Exception as e:
+            print(f"⚠️ No se pudo limpiar la consola: {e}")
+            # Fallback: imprimir líneas en blanco
+            print('\n' * 50)
+
     def lanzar_scan(self):
         """Iniciar escaneo de redes"""
         if not hasattr(self, 'scan_worker') or not self.scan_worker.isRunning():
@@ -675,12 +757,25 @@ class MainWindow(QMainWindow):
         return super().resizeEvent(event)
 
     def show_traffic_for_bssid(self, bssid: str, red_meta: dict = None):
-        """Mostrar diálogo de detalles"""
+        """Mostrar diálogo de detalles - CERRAR DIÁLOGO ANTERIOR SI EXISTE"""
+        # Cerrar diálogo anterior si existe
+        if self.active_dialog and self.active_dialog.isVisible():
+            self.active_dialog.close()
+            self.active_dialog = None
+        
+        # Crear nuevo diálogo
         dialog = NetworkDetailsDialog(bssid, red_meta or {}, self)
+        self.active_dialog = dialog
+        dialog.finished.connect(self._on_dialog_closed)
         dialog.exec()
+
+    def _on_dialog_closed(self):
+        """Callback cuando se cierra el diálogo"""
+        self.active_dialog = None
 
 # ----------------- Main -----------------
 def main():
+    verificar_librerias()
     app = QApplication(sys.argv)
     
     # Establecer estilo de aplicación
@@ -698,6 +793,13 @@ def main():
     
     window = MainWindow()
     window.show()
+    
+    # Manejar cierre limpio de la aplicación
+    def handle_application_quit():
+        window.close()
+    
+    app.aboutToQuit.connect(handle_application_quit)
+    
     sys.exit(app.exec())
 
 if __name__ == "__main__":

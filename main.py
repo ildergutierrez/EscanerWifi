@@ -403,10 +403,19 @@ def estimate_distance_realistic(rssi_dbm, freq_mhz=2412.0, environment="indoor")
 def detect_environment(redes):
     """Detecta el tipo de ambiente basado en las redes escaneadas"""
     if not redes:
-        return "indoor"
+        return "desconocido"
     
-    strong_networks = sum(1 for net in redes if net.get("Señal", -100) > -50)
-    return "indoor" if strong_networks >= 3 else "outdoor"
+    total = len(redes)
+    fuertes = sum(1 for net in redes if net.get("Señal", -100) > -67)   # señales buenas
+    muy_fuertes = sum(1 for net in redes if net.get("Señal", -100) > -55)  # señales excelentes
+
+    # Reglas más flexibles
+    if total >= 4 and (fuertes >= 2 or muy_fuertes >= 1):
+        return "indoor"
+    elif total <= 2 and fuertes == 0:
+        return "outdoor"
+    else:
+        return "indoor" if fuertes > 0 else "outdoor"
 
 
 # ---------- Tecnología y ancho de canal ----------
@@ -560,51 +569,51 @@ def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.
 
 
 # ---------- Función principal ----------
-if __name__ == "__main__":
-    try:
-        print("Escaneando redes WiFi con netsh (Windows)...")
-        print("Esto puede tomar hasta 45 segundos...")
+# if __name__ == "__main__":
+#     try:
+#         print("Escaneando redes WiFi con netsh (Windows)...")
+#         print("Esto puede tomar hasta 45 segundos...")
         
-        # Verificar que netsh existe
-        try:
-            subprocess.run(['netsh', '/?'], capture_output=True, timeout=5)
-        except FileNotFoundError:
-            print("ERROR: 'netsh' no encontrado. Este script solo funciona en Windows.")
-            sys.exit(1)
+#         # Verificar que netsh existe
+#         try:
+#             subprocess.run(['netsh', '/?'], capture_output=True, timeout=5)
+#         except FileNotFoundError:
+#             print("ERROR: 'netsh' no encontrado. Este script solo funciona en Windows.")
+#             sys.exit(1)
         
-        redes = scan_wifi_netsh(environment="auto")
+#         redes = scan_wifi_netsh(environment="auto")
         
-        print(f"\n{'='*80}")
-        print(f"ESCANEO COMPLETADO - {len(redes)} redes encontradas")
-        if redes:
-            print(f"Ambiente detectado: {redes[0]['Ambiente']}")
-        print(f"{'='*80}")
+#         print(f"\n{'='*80}")
+#         print(f"ESCANEO COMPLETADO - {len(redes)} redes encontradas")
+#         if redes:
+#             print(f"Ambiente detectado: {redes[0]['Ambiente']}")
+#         print(f"{'='*80}")
         
-        if redes:
-            for i, r in enumerate(redes, 1):
-                print(f"\n--- Red #{i} ---")
-                print(f"SSID: {r['SSID']}")
-                print(f"BSSID: {r['BSSID']}")
-                print(f"Señal: {r['Señal']} dBm")
-                if r['Frecuencia']:
-                    print(f"Frecuencia: {r['Frecuencia']} MHz")
-                print(f"Banda: {r['Banda']}")
-                if r['Canal']:
-                    print(f"Canal: {r['Canal']}")
-                print(f"Seguridad: {r['Seguridad']}")
-                print(f"Autenticación: {r['Autenticación']}")
-                print(f"Cifrado: {r['Cifrado']}")
-                print(f"Ancho de canal: {r['AnchoCanal']}")
-                if r['Estimacion_m']:
-                    print(f"Distancia estimada: {r['Estimacion_m']} metros")
-                print(f"Tecnología: {r['Tecnologia']}")
-                print(f"Ambiente: {r['Ambiente']}")
-        else:
-            print("\nNo se encontraron redes. Posibles causas:")
-            print("1. El adaptador WiFi está apagado")
-            print("2. No hay redes disponibles en el área")
-            print("3. Problemas de permisos (ejecutar como administrador)")
-            print("4. El controlador WiFi no funciona correctamente")
+#         if redes:
+#             for i, r in enumerate(redes, 1):
+#                 print(f"\n--- Red #{i} ---")
+#                 print(f"SSID: {r['SSID']}")
+#                 print(f"BSSID: {r['BSSID']}")
+#                 print(f"Señal: {r['Señal']} dBm")
+#                 if r['Frecuencia']:
+#                     print(f"Frecuencia: {r['Frecuencia']} MHz")
+#                 print(f"Banda: {r['Banda']}")
+#                 if r['Canal']:
+#                     print(f"Canal: {r['Canal']}")
+#                 print(f"Seguridad: {r['Seguridad']}")
+#                 print(f"Autenticación: {r['Autenticación']}")
+#                 print(f"Cifrado: {r['Cifrado']}")
+#                 print(f"Ancho de canal: {r['AnchoCanal']}")
+#                 if r['Estimacion_m']:
+#                     print(f"Distancia estimada: {r['Estimacion_m']} metros")
+#                 print(f"Tecnología: {r['Tecnologia']}")
+#                 print(f"Ambiente: {r['Ambiente']}")
+#         else:
+#             print("\nNo se encontraron redes. Posibles causas:")
+#             print("1. El adaptador WiFi está apagado")
+#             print("2. No hay redes disponibles en el área")
+#             print("3. Problemas de permisos (ejecutar como administrador)")
+#             print("4. El controlador WiFi no funciona correctamente")
             
-    except Exception as e:
-        print(f"Error durante el escaneo: {e}")
+#     except Exception as e:
+#         print(f"Error durante el escaneo: {e}")

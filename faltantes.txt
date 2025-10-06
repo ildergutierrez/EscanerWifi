@@ -1,62 +1,7 @@
-Perfecto — vamos a **inventariar y seleccionar** qué partes ya están creadas y cuáles faltan, para avanzar paso a paso y sin perder tiempo.
-
-# Estado actual (lo que ya hay)
-
-1. **Recolección básica de metadatos Wi-Fi (scan de APs)** — *ya implementado*.
-   Tu función `scan_wifi()` devuelve SSID, BSSID, señal, frecuencia, banda, canal y seguridad. Esto está en `main.py`.&#x20;
-
-2. **Interfaz de usuario (desktop)** — *ya existe una UI funcional (Tkinter)*.
-   Tienes una UI que muestra las redes y refresca (la migración a PyQt6 la discutimos y te di código opcional). El archivo actual con la UI original es `ui.py`.&#x20;
-
-3. **Documento de diseño / objetivos** — *ya disponible* (tu artículo), con objetivos claros: ML para clasificación/anomalías, recolección en tiempo real, escalabilidad, etc. Lo estoy usando como hoja de ruta.&#x20;
-
-# Qué NO está (o está solo parcialmente)
-
-* **Captura de tráfico en bruto (pcap / sniffing de paquetes 802.11)** — *no está implementado*. `scan_wifi()` es un escaneo pasivo de APs, no captura tramas.
-* **Extracción sistemática de features y pipeline de dataset (CSV/Parquet)** — *no hay pipeline concreto* que convierta pcap/flows → features listos para ML.
-* **Modelos de clasificación / detección de anomalías entrenables** — *no hay código ML aún* (entrenamiento, inferencia, persistencia de modelos).
-* **API/servicio para ingest / registro (FastAPI, broker, DB)** — *no implementado*.
-* **Logging estructurado, almacenamiento histórico y despliegue (Docker, orquestador)** — *faltan*.
-
----
-
-# Recomendación priorizada — siguiente paso lógico (mínimo esfuerzo, alto impacto)
-
-Dado lo que ya tienes, te recomiendo avanzar en este orden (cada paso produce artefactos reutilizables):
-
-1. **(Rápido) Añadir fabricante (vendor) por OUI a `scan_wifi()`** — low friction, mejor documentación de los APs y útil para filtros. (Podemos integrar la función `get_vendor_from_mac()` con cache y opción offline `oui.txt`.)
-2. **(Fundacional) Crear un *Collector* separado para captura de paquetes (opcional dependiendo de SO/hardware)**:
-
-   * En Linux: usar `scapy` en modo monitor para capturar tramas 802.11 → guardar pcap rotativo.
-   * En Windows: requiere `Npcap` + adaptador compatible (monitor mode no siempre disponible).
-     Output: archivos pcap o un flujo de eventos JSON.
-3. **(ETL) Script de extracción de features** que lea pcap(s) y genere CSV/Parquet con features por flujo/ventana (ej.: bytes, packets, iat, payload sizes, duración, flags).
-4. **(ML) Pipeline mínimo**: notebook/script que entrena un RandomForest sobre el CSV y guarda el modelo (joblib). También un script de inferencia que consume features y devuelve etiqueta/anomalía.
-5. **(Integración) Exponer ingest/scan y resultados vía FastAPI** para que UI (PyQt o web) consuma datos en tiempo real y para poder desplegarlo como servicio.
-6. **(UX) Actualizar UI (PyQt6)** para consumir la API y mostrar vendor, opción exportar CSV, botones de start/stop capture, y modal de detalles.
-7. **(Infra) Logging + persistencia (Postgres/Timescale/Influx) y Docker Compose** para desplegarlo en un servidor.
-
----
-
-# Riesgos / restricciones importantes
-
-* **Captura 802.11 (modo monitor)** depende de OS y adaptador. En Windows puede ser muy limitada; en Linux es mucho más fiable.
-* **Legal/ético**: sniffing de redes ajenas sin permiso es ilegal. Solo prueba en tus redes o con consentimiento.
-* **Performance**: captura de alto volumen requiere rotación de archivos y almacenamiento eficiente (parquet).
-
----
-
-# ¿Qué seleccionamos ahora? (elige una opción y la empiezo)
-
-A continuación te doy las opciones concretas que puedo implementar **ahora mismo** (elige 1):
-
-A. Integrar **resolución de fabricante (OUI)** en `main.py` y mostrarlo en la UI (rápido, low risk).
-B. Implementar un **collector de captura (scapy)** que guarde pcap rotativos (necesito que me digas si trabajas en Linux o Windows y si tienes adaptador en modo monitor).
-C. Crear el **script ETL** que convierte pcap → CSV/Parquet con features básicos (si ya tienes pcap o eliges B para generarlos).
-D. Hacer un **pipeline ML mínimo**: entrenar RandomForest sobre features de ejemplo (si me das datos o aceptas generar sintéticos).
-E. Exponer **FastAPI** con endpoint `/scan` y `/pcap` para integración UI (preparar para migrar UI a cliente consumidor de API).
-F. Actualizar la **UI PyQt6** para consumir resultados del `scan_wifi()` (o del API) y mostrar Fabricante + export CSV.
-
-Dime la letra (A–F) que quieres que implemente primero y lo hago — te entregaré el código listo a copiar/pegar + instrucciones de instalación/uso.
-
-Si prefieres, puedo empezar por A automáticamente (es el camino más corto y útil). ¿Inicio con **A**?
+* scaner de red (MAC, NOMBRE, ANCHO, AMBIENTE, CANAL....)
+* consulta a la IA
+* Detector de fabricante (liberacon de mac aleatori en espera)
+* Verificador de librerias
+* Dispositivos conectados (con fallas)
+* Trafico de la red (en espera)
+* 

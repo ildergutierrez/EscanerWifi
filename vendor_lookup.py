@@ -1,26 +1,24 @@
-# vendor_lookup.py
 """
-Consulta de fabricantes a partir del BSSID (OUI).
-Versión con descarga automática desde fuentes oficiales.
+Consulta universal de fabricantes a partir del BSSID (OUI).
+Sistema mejorado con múltiples fuentes y detección precisa de cualquier marca.
 """
 
 import requests
 import json
 import os
+import re
 import time
-import gzip
-import shutil
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Dict, Optional, List
 
 class VendorLookup:
     def __init__(self):
-        self.vendors = {}
+        self.vendors: Dict[str, str] = {}
         self.cache_file = os.path.join(os.path.dirname(__file__), "mac_vendors.json")
         self.max_cache_age = 30  # días
         self._load_database()
     
-    def _load_database(self):
+    def _load_database(self) -> bool:
         """Cargar base de datos desde cache o descargar"""
         try:
             # Verificar si el cache existe y es reciente
@@ -29,42 +27,48 @@ class VendorLookup:
                 if file_age.days < self.max_cache_age:
                     with open(self.cache_file, 'r', encoding='utf-8') as f:
                         self.vendors = json.load(f)
-                        print(f"✅ Base de datos cargada: {len(self.vendors)} fabricantes")
+                        print(f"✅ Base de datos cargada desde cache: {len(self.vendors)} fabricantes")
                         return True
                 else:
                     print("🔄 Cache expirado, descargando nueva base...")
             else:
                 print("📥 Base de datos no encontrada, descargando...")
             
-            # Descargar nueva base de datos
+            # Intentar descargar nueva base de datos
             return self._download_oui_database()
             
         except Exception as e:
             print(f"⚠️ Error cargando base: {e}")
             return self._download_oui_database()
     
-    def _download_oui_database(self):
-        """Descargar base de datos OUI desde fuentes alternativas"""
+    def _download_oui_database(self) -> bool:
+        """Descargar base de datos OUI desde múltiples fuentes"""
         sources = [
-            self._download_from_ieee,
             self._download_from_wireshark,
+            self._download_from_ieee,
             self._download_from_linux,
         ]
         
+        success_count = 0
         for source in sources:
             try:
                 if source():
-                    print("✅ Base de datos descargada exitosamente")
-                    return True
+                    success_count += 1
+                    print(f"✅ {source.__name__} exitoso")
+                    time.sleep(1)  # Espera entre requests
             except Exception as e:
-                print(f"❌ Error con fuente {source.__name__}: {e}")
+                print(f"❌ Error con {source.__name__}: {e}")
                 continue
         
-        print("❌ Todas las fuentes fallaron, usando base integrada")
-        return self._load_builtin_database()
+        if success_count > 0:
+            print(f"✅ Base de datos actualizada desde {success_count} fuentes")
+            return True
+        else:
+            print("❌ Todas las fuentes fallaron, usando base integrada")
+            return self._load_builtin_database()
     
-    def _download_from_wireshark(self):
-        """Descargar desde Wireshark (fuente confiable)"""
+    def _download_from_wireshark(self) -> bool:
+        """Descargar desde Wireshark (fuente más confiable y completa)"""
         try:
             print("📥 Descargando desde Wireshark...")
             url = "https://code.wireshark.org/review/gitweb?p=wireshark.git;a=blob_plain;f=manuf"
@@ -79,149 +83,146 @@ class VendorLookup:
                     if len(parts) >= 2:
                         oui = parts[0].strip().upper()
                         vendor = parts[1].strip()
-                        # Solo tomar OUI completos (XX:XX:XX)
+                        
+                        # Filtrar solo OUI completos (formato XX:XX:XX)
                         if len(oui) == 8 and oui.count(':') == 2:
-                            vendors[oui] = vendor
+                            # Limpiar nombre (remover comentarios entre paréntesis)
+                            vendor = re.sub(r'\([^)]*\)', '', vendor).strip()
+                            if vendor:
+                                vendors[oui] = vendor
             
-            self.vendors = vendors
-            self._save_database()
-            return True
+            if vendors:
+                self.vendors = vendors  # Reemplazar con datos frescos
+                self._save_database()
+                print(f"📊 Wireshark: {len(vendors)} fabricantes")
+                return True
+            return False
             
         except Exception as e:
             print(f"❌ Error con Wireshark: {e}")
             return False
     
-    def _download_from_ieee(self):
-        """Descargar desde IEEE (formato CSV)"""
+    def _download_from_ieee(self) -> bool:
+        """Descargar desde IEEE (fuente oficial)"""
         try:
             print("📥 Descargando desde IEEE...")
             url = "https://standards-oui.ieee.org/oui/oui.csv"
             response = requests.get(url, timeout=30)
             response.raise_for_status()
             
-            vendors = {}
+            new_vendors = {}
             lines = response.text.split('\n')[1:]  # Saltar header
+            
             for line in lines:
                 if line.strip():
-                    parts = line.split('",')
-                    if len(parts) >= 3:
-                        oui = parts[0].replace('"', '').strip().upper()
-                        vendor = parts[2].replace('"', '').strip()
-                        if len(oui) == 8 and oui.count(':') == 2:
-                            vendors[oui] = vendor
+                    try:
+                        # Manejar formato CSV correctamente
+                        parts = line.split('","')
+                        if len(parts) >= 3:
+                            oui = parts[0].replace('"', '').strip().upper()
+                            vendor = parts[2].replace('"', '').strip()
+                            
+                            # Convertir formato IEEE (001122) a MAC (00:11:22)
+                            if len(oui) == 6 and oui.isalnum():
+                                oui_formatted = f"{oui[0:2]}:{oui[2:4]}:{oui[4:6]}"
+                                if vendor and vendor != "undefined":
+                                    new_vendors[oui_formatted] = vendor
+                    except:
+                        continue
             
-            self.vendors = vendors
-            self._save_database()
-            return True
+            if new_vendors:
+                self.vendors.update(new_vendors)  # Actualizar, no reemplazar
+                self._save_database()
+                print(f"📊 IEEE: {len(new_vendors)} fabricantes añadidos")
+                return True
+            return False
             
         except Exception as e:
             print(f"❌ Error con IEEE: {e}")
             return False
     
-    def _download_from_linux(self):
-        """Descargar base de datos usada en sistemas Linux"""
+    def _download_from_linux(self) -> bool:
+        """Descargar base usada en sistemas Linux"""
         try:
             print("📥 Descargando base Linux...")
-            url = "https://git.kernel.org/pub/scm/linux/kernel/git/shemminger/ethtool.git/plain/oui.c"
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
+            urls = [
+                "http://linuxnet.ca/ieee/oui.txt",
+                "https://git.kernel.org/pub/scm/linux/kernel/git/shemminger/ethtool.git/plain/oui.c"
+            ]
             
-            vendors = {}
-            in_oui_table = False
-            
-            for line in response.text.split('\n'):
-                line = line.strip()
-                if 'oui_table[]' in line:
-                    in_oui_table = True
+            for url in urls:
+                try:
+                    response = requests.get(url, timeout=20)
+                    if response.status_code == 200:
+                        new_vendors = self._parse_linux_format(response.text)
+                        if new_vendors:
+                            self.vendors.update(new_vendors)
+                            print(f"📊 Linux: {len(new_vendors)} fabricantes añadidos")
+                            return True
+                except:
                     continue
-                if in_oui_table and '}' in line:
-                    break
-                if in_oui_table and '{' in line and '"' in line:
-                    # Formato: { "00:00:00", "Vendor Name" },
-                    parts = line.split('"')
-                    if len(parts) >= 4:
-                        oui = parts[1].upper()
-                        vendor = parts[3]
-                        vendors[oui] = vendor
-            
-            self.vendors = vendors
-            self._save_database()
-            return True
+            return False
             
         except Exception as e:
             print(f"❌ Error con base Linux: {e}")
             return False
     
-    def _load_builtin_database(self):
-        """Cargar base de datos integrada como fallback"""
+    def _parse_linux_format(self, content: str) -> Dict[str, str]:
+        """Parsear diferentes formatos de archivos Linux"""
+        vendors = {}
+        
+        # Formato oui.txt
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and len(line) >= 18 and line[2] == '-':
+                oui = line[:8].replace('-', ':').upper()
+                vendor = line[18:].strip()
+                if vendor:
+                    vendors[oui] = vendor
+        
+        # Formato oui.c
+        if not vendors:
+            for line in content.split('\n'):
+                if '{ "' in line and '"' in line:
+                    parts = line.split('"')
+                    if len(parts) >= 4:
+                        oui = parts[1].upper()
+                        vendor = parts[3]
+                        if oui.count(':') == 2:
+                            vendors[oui] = vendor
+        
+        return vendors
+    
+    def _load_builtin_database(self) -> bool:
+        """Cargar base de datos integrada mínima como fallback"""
         builtin_vendors = {
-            "A8:49:4D": "Samsung Electronics Co.,Ltd",
-            "C0:C9:E3": "TP-LINK TECHNOLOGIES CO.,LTD.",
-            "DC:54:AD": "D-Link International",
-            "24:A6:5E": "Samsung Electronics Co.,Ltd",
-            "00:50:C2": "Microsoft Corporation",
-            "00:0C:29": "VMware, Inc.",
+            # Fabricantes más comunes globalmente
             "00:1B:44": "HP Inc.",
-            "00:1D:0F": "Cisco Systems, Inc",
             "00:23:AE": "Apple, Inc.",
+            "00:0D:3A": "Intel Corporate",
+            "00:50:C2": "Microsoft Corporation",
+            "C0:C9:E3": "TP-LINK TECHNOLOGIES CO.,LTD.",
+            "A8:49:4D": "Samsung Electronics Co.,Ltd",
+            "24:A6:5E": "Huawei Technologies Co., Ltd",  # CORREGIDO
+            "DC:54:AD": "D-Link International",
+            "B8:27:EB": "Raspberry Pi Trading Ltd",
+            "00:0C:29": "VMware, Inc.",
+            "08:00:27": "PCS Systemtechnik GmbH",
+            "00:1C:42": "Dell Inc.",
+            "00:1B:FC": "Nokia Corporation",
+            "00:02:EE": "LG Electronics",
+            "00:1A:2B": "Sony Corporation",
+            "00:12:EE": "ASUSTek COMPUTER INC.",
+            "00:0F:B0": "NETGEAR",
+            "64:09:80": "Xiaomi Communications Co Ltd",
+            "00:1D:0F": "Cisco Systems, Inc",
+            "00:13:CE": "Intel Corporate",
             "00:26:BB": "Apple, Inc.",
             "00:50:56": "VMware, Inc.",
-            "00:0D:3A": "Intel Corporate",
-            "00:13:CE": "Intel Corporate",
-            "00:1B:21": "Intel Corporate",
-            "00:24:D6": "Intel Corporate",
-            "08:00:27": "PCS Systemtechnik GmbH",
-            "0A:00:27": "PCS Systemtechnik GmbH",
-            "00:1C:42": "Dell Inc.",
-            "00:22:19": "Dell Inc.",
-            "00:14:22": "Dell Inc.",
-            "00:18:8B": "Dell Inc.",
-            "00:1D:09": "Dell Inc.",
-            "00:0F:1F": "Dell Inc.",
-            "00:12:3F": "Dell Inc.",
-            "B8:27:EB": "Raspberry Pi Trading Ltd",
-            "28:16:AD": "Huawei Technologies Co., Ltd",
-            "64:16:66": "Huawei Technologies Co., Ltd",
-            "E4:70:B8": "Huawei Technologies Co., Ltd",
-            "00:1E:10": "Huawei Technologies Co., Ltd",
-            "00:25:9E": "Huawei Technologies Co., Ltd",
-            "00:1B:FC": "Nokia Corporation",
-            "00:12:62": "Nokia Corporation",
-            "00:18:4D": "Nokia Corporation",
-            "00:15:A0": "Nokia Corporation",
-            "00:1E:3A": "Nokia Corporation",
-            "00:23:B3": "Nokia Corporation",
-            "00:24:03": "Nokia Corporation",
-            "00:26:CC": "Nokia Corporation",
-            "00:02:EE": "LG Electronics",
-            "00:1F:6B": "LG Electronics",
-            "00:21:FB": "LG Electronics",
-            "00:23:86": "LG Electronics",
-            "00:26:E2": "LG Electronics",
-            "00:60:B0": "LG Electronics",
-            "00:E0:1C": "LG Electronics",
-            "00:0E:6D": "LG Electronics",
-            "00:1B:FB": "LG Electronics",
-            "00:1E:7D": "LG Electronics",
-            "00:22:A9": "LG Electronics",
-            "00:24:83": "LG Electronics",
-            "00:26:43": "LG Electronics",
-            "00:60:1C": "ZyXEL Communications Corporation",
-            "00:13:49": "ZyXEL Communications Corporation",
-            "00:14:6C": "ZyXEL Communications Corporation",
-            "00:17:C5": "ZyXEL Communications Corporation",
-            "00:19:CB": "ZyXEL Communications Corporation",
-            "00:1B:11": "ZyXEL Communications Corporation",
-            "00:1D:19": "ZyXEL Communications Corporation",
-            "00:1F:C7": "ZyXEL Communications Corporation",
-            "00:21:2A": "ZyXEL Communications Corporation",
-            "00:23:5A": "ZyXEL Communications Corporation",
-            "00:24:7F": "ZyXEL Communications Corporation",
-            "00:26:5A": "ZyXEL Communications Corporation",
         }
         
         self.vendors = builtin_vendors
-        print(f"✅ Base integrada cargada: {len(builtin_vendors)} fabricantes")
+        print(f"✅ Base integrada cargada: {len(builtin_vendors)} fabricantes comunes")
         self._save_database()
         return True
     
@@ -235,34 +236,98 @@ class VendorLookup:
             print(f"⚠️ Error guardando base: {e}")
     
     def lookup(self, mac_address: str) -> str:
-        """Buscar fabricante por dirección MAC"""
+        """
+        Buscar fabricante por dirección MAC.
+        Detecta automáticamente cualquier fabricante.
+        """
         if not mac_address or len(mac_address) < 8:
             return "Desconocido"
         
         try:
-            # Limpiar y formatear MAC
-            mac_clean = mac_address.upper().replace('-', ':')
+            # Limpiar y normalizar formato MAC
+            mac_clean = mac_address.upper().replace('-', ':').replace('.', ':')
             parts = mac_clean.split(':')
+            
             if len(parts) < 3:
                 return "Desconocido"
             
-            # Verificar si es MAC aleatoria
-            first_octet = int(parts[0], 16)
-            if first_octet & 0b10:  # bit LAA - MAC aleatoria
-                return "MAC aleatoria"
+            # Verificar formato válido
+            for part in parts[:3]:
+                if len(part) != 2 or not all(c in '0123456789ABCDEF' for c in part):
+                    return "Formato MAC inválido"
             
             # Obtener OUI (primeros 3 bytes)
             oui = ':'.join(parts[:3])
             
-            # Buscar en base de datos
+            # Buscar en base de datos local primero
             if oui in self.vendors:
                 return self.vendors[oui]
+            
+            # Si no está en local, buscar en API externa
+            vendor = self._search_realtime(oui)
+            if vendor != "Desconocido":
+                return vendor
+            
+            # Último intento: verificar si es MAC aleatoria
+            try:
+                first_octet = int(parts[0], 16)
+                is_local = (first_octet & 0b00000010) != 0
+                if is_local:
+                    return "MAC Aleatoria"
+            except:
+                pass
             
             return "Desconocido"
             
         except Exception as e:
-            print(f"⚠️ Error en lookup: {e}")
+            print(f"⚠️ Error en lookup MAC {mac_address}: {e}")
             return "Desconocido"
+    
+    def _search_realtime(self, oui: str) -> str:
+        """Búsqueda en tiempo real desde API externa"""
+        apis = [
+            self._query_macvendors_api,
+            self._query_maclookup_api,
+        ]
+        
+        for api in apis:
+            try:
+                vendor = api(oui)
+                if vendor and vendor != "Desconocido":
+                    # Guardar en cache para futuras consultas
+                    self.vendors[oui] = vendor
+                    self._save_database()
+                    return vendor
+            except:
+                continue
+        
+        return "Desconocido"
+    
+    def _query_macvendors_api(self, oui: str) -> str:
+        """Consultar API de macvendors.com"""
+        try:
+            url = f"https://api.macvendors.com/{oui.replace(':', '')}"
+            response = requests.get(url, timeout=3)
+            if response.status_code == 200:
+                vendor = response.text.strip()
+                if vendor and "error" not in vendor.lower() and vendor != "undefined":
+                    return vendor
+        except:
+            pass
+        return "Desconocido"
+    
+    def _query_maclookup_api(self, oui: str) -> str:
+        """Consultar API de maclookup.app"""
+        try:
+            url = f"https://api.maclookup.app/v2/macs/{oui}"
+            response = requests.get(url, timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') and data.get('company'):
+                    return data['company']
+        except:
+            pass
+        return "Desconocido"
 
 # Instancia global singleton
 _vendor_lookup = None
@@ -276,24 +341,27 @@ def _get_vendor_lookup():
 
 def get_vendor(bssid: str) -> str:
     """
-    Obtiene el fabricante a partir de un BSSID.
+    Obtiene el fabricante a partir de un BSSID/MAC.
+    
+    Args:
+        bssid: Dirección MAC del dispositivo (cualquier formato)
+        
+    Returns:
+        str: Nombre del fabricante o "Desconocido"
     """
     try:
         if not bssid:
             return "Desconocido"
         
         lookup = _get_vendor_lookup()
-        result = lookup.lookup(bssid)
-        return result if result else "Desconocido"
+        return lookup.lookup(bssid)
         
     except Exception as e:
         print(f"❌ Error crítico en get_vendor: {e}")
         return "Desconocido"
 
 def update_oui_database() -> bool:
-    """
-    Fuerza actualización manual de la base de datos OUI.
-    """
+    """Forzar actualización manual de la base de datos OUI"""
     try:
         lookup = _get_vendor_lookup()
         return lookup._download_oui_database()
@@ -302,9 +370,7 @@ def update_oui_database() -> bool:
         return False
 
 def get_database_info() -> dict:
-    """
-    Obtiene información sobre la base de datos.
-    """
+    """Obtener información sobre la base de datos"""
     try:
         lookup = _get_vendor_lookup()
         cache_file = lookup.cache_file
@@ -322,31 +388,58 @@ def get_database_info() -> dict:
             "cache_age_days": cache_age.days if cache_age else None,
             "database_size": f"{len(str(lookup.vendors)) / 1024:.1f} KB"
         }
-    except Exception:
-        return {"error": "No disponible"}
+    except Exception as e:
+        return {"error": f"No disponible: {e}"}
+
+def test_multiple_vendors():
+    """Probar detección de múltiples fabricantes"""
+    print("\n🧪 Probando detección de múltiples fabricantes...")
+    
+    test_macs = [
+        # Huawei
+        "24:A6:5E:12:34:56",
+        "28:16:AD:AB:CD:EF",
+        # Samsung
+        "A8:49:4D:11:22:33", 
+        "AC:5A:14:AA:BB:CC",
+        # Apple
+        "00:23:AE:44:55:66",
+        "04:15:52:77:88:99",
+        # TP-Link
+        "C0:C9:E3:33:44:55",
+        "C4:A8:1D:66:77:88",
+        # D-Link
+        "DC:54:AD:99:AA:BB",
+        # Intel
+        "00:0D:3A:CC:DD:EE",
+        # Microsoft
+        "00:50:C2:FF:11:22",
+        # Xiaomi
+        "64:09:80:55:66:77",
+    ]
+    
+    for mac in test_macs:
+        vendor = get_vendor(mac)
+        print(f"  📱 {mac} -> {vendor}")
 
 # Inicialización al importar
-try:
+if __name__ == "__main__":
+    print("🚀 Inicializando vendor_lookup...")
     _get_vendor_lookup()
+    
+    # Ejecutar pruebas completas
+    test_multiple_vendors()
+    
+    # Mostrar info de la base de datos
+    db_info = get_database_info()
+    print(f"\n📊 Información de la base de datos:")
+    for key, value in db_info.items():
+        print(f"   {key}: {value}")
+    
     print("✅ Módulo vendor_lookup inicializado correctamente")
-except Exception as e:
-    print(f"❌ Error inicializando vendor_lookup: {e}")
-
-# Ejemplo de uso y pruebas
-# if __name__ == "__main__":
-#     # Test con algunas MAC conocidas
-#     test_macs = [
-#         "A8:49:4D:2C:32:F4",  # Samsung
-#         "C0:C9:E3:62:1F:98",  # TP-Link
-#         "DC:54:AD:61:11:0F",  # D-Link
-#         "24:A6:5E:1B:78:77",  # Samsung
-#         "B8:27:EB:12:34:56",  # Raspberry Pi
-#     ]
-    
-#     print("🧪 Probando vendor lookup...")
-#     for mac in test_macs:
-#         vendor = get_vendor(mac)
-#         print(f"  {mac} -> {vendor}")
-    
-#     db_info = get_database_info()
-#     print(f"📊 Info base de datos: {db_info}")
+else:
+    # Inicialización silenciosa cuando se importa como módulo
+    try:
+        _get_vendor_lookup()
+    except Exception as e:
+        print(f"❌ Error inicializando vendor_lookup: {e}")

@@ -2,7 +2,7 @@ import sys
 import os
 import subprocess
 import platform
-from typing import Optional
+from typing import Optional, Dict
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout,
     QScrollArea, QGridLayout, QPushButton, QFrame, QDialog,
@@ -21,6 +21,15 @@ except Exception as e:
     print(f"Error cargando vendor_lookup: {e}")
     def get_vendor(_):
         return "Desconocido"
+
+try:
+    from device_scanner import get_connected_devices, get_devices_count
+except Exception as e:
+    print(f"Error cargando device_scanner: {e}")
+    def get_connected_devices(red_info=None):
+        return {'success': False, 'devices': [], 'total_devices': 0, 'max_devices': 50, 'usage_percentage': 0}
+    def get_devices_count(red_info=None):
+        return 0
 
 class SuggestionWindow(QDialog):
     def __init__(self, titulo: str, texto: str, parent=None):
@@ -191,6 +200,27 @@ class VendorWorker(QThread):
                 self.terminate()
                 self.wait(1000)
 
+class DevicesScanWorker(QThread):
+    finished = pyqtSignal(dict)
+    
+    def __init__(self, red_meta):
+        super().__init__()
+        self.red_meta = red_meta
+    
+    def run(self):
+        try:
+            result = get_connected_devices(self.red_meta)
+            self.finished.emit(result)
+        except Exception as e:
+            self.finished.emit({
+                'success': False,
+                'error': str(e),
+                'devices': [],
+                'total_devices': 0,
+                'max_devices': 50,
+                'usage_percentage': 0
+            })
+
 # ----------------- UI Elements -----------------
 class Card(QFrame):
     def __init__(self, red: dict, parent=None):
@@ -253,6 +283,13 @@ class Card(QFrame):
         security_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
         info_layout.addWidget(security_lbl)
 
+        # Dispositivos conectados
+        devices_count = get_devices_count(self.red)
+        devices_lbl = QLabel(f"📱 {devices_count} dispositivos conectados")
+        devices_lbl.setFont(QFont("Segoe UI", 10))
+        devices_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        info_layout.addWidget(devices_lbl)
+
         # Distancia estimada
         distance = self.red.get("Estimacion_m")
         if distance:
@@ -270,6 +307,235 @@ class Card(QFrame):
             self.window().show_traffic_for_bssid(self.red.get("BSSID"), self.red)
         else:
             super().mousePressEvent(event)
+
+# ----------------- Diálogo de Dispositivos -----------------
+class DevicesDialog(QDialog):
+    def __init__(self, red_meta: dict, parent=None):
+        super().__init__(parent)
+        self.red_meta = red_meta
+        
+        # Establecer icono
+        self.set_icon()
+        
+        self.setWindowTitle(f"Dispositivos Conectados - {red_meta.get('SSID', 'Red')}")
+        self.setMinimumSize(900, 700)
+        self.setup_ui()
+        
+        # Escanear dispositivos en segundo plano
+        self.scan_worker = DevicesScanWorker(red_meta)
+        self.scan_worker.finished.connect(self._on_scan_finished)
+        self.scan_worker.start()
+        
+    def set_icon(self):
+        icon_path = os.path.join(os.path.dirname(__file__), "wifi.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        
+    def setup_ui(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {COLOR_BG};
+                color: {COLOR_TEXT};
+                font-family: 'Segoe UI';
+            }}
+            QFrame {{
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border: 1px solid {COLOR_CARD_BORDER};
+            }}
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        self.setLayout(layout)
+
+        # Título
+        title_lbl = QLabel(f"Dispositivos en {self.red_meta.get('SSID', 'Red')}")
+        title_lbl.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        title_lbl.setStyleSheet(f"""
+            QLabel {{
+                color: #FFFFFF;
+                padding: 15px;
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border-left: 4px solid {COLOR_ACCENT};
+            }}
+        """)
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_lbl)
+
+        # Información de capacidad
+        self.capacity_frame = QFrame()
+        capacity_layout = QHBoxLayout()
+        capacity_layout.setContentsMargins(20, 15, 20, 15)
+        self.capacity_frame.setLayout(capacity_layout)
+        
+        self.connected_lbl = QLabel("🔄 Escaneando dispositivos...")
+        self.connected_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        
+        self.capacity_lbl = QLabel("")
+        self.capacity_lbl.setFont(QFont("Segoe UI", 11))
+        
+        self.usage_lbl = QLabel("")
+        self.usage_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        
+        capacity_layout.addWidget(self.connected_lbl)
+        capacity_layout.addStretch()
+        capacity_layout.addWidget(self.capacity_lbl)
+        capacity_layout.addWidget(self.usage_lbl)
+        
+        layout.addWidget(self.capacity_frame)
+
+        # Lista de dispositivos
+        self.devices_frame = QFrame()
+        devices_layout = QVBoxLayout()
+        devices_layout.setContentsMargins(15, 15, 15, 15)
+        self.devices_frame.setLayout(devices_layout)
+        
+        devices_title = QLabel("📋 Dispositivos Detectados")
+        devices_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        devices_title.setStyleSheet(f"color: {COLOR_ACCENT};")
+        devices_layout.addWidget(devices_title)
+        
+        # Scroll area para dispositivos
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {COLOR_BG};
+                border: 1px solid {COLOR_CARD_BORDER};
+                border-radius: 6px;
+            }}
+        """)
+        self.scroll_area.setWidgetResizable(True)
+        
+        self.scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout(self.scroll_content)
+        self.scroll_layout.setContentsMargins(10, 10, 10, 10)
+        self.scroll_layout.setSpacing(8)
+        
+        # Mensaje de carga
+        self.loading_lbl = QLabel("🔍 Escaneando la red en busca de dispositivos...")
+        self.loading_lbl.setFont(QFont("Segoe UI", 11))
+        self.loading_lbl.setStyleSheet(f"color: {COLOR_MUTED}; padding: 20px;")
+        self.loading_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_layout.addWidget(self.loading_lbl)
+        
+        self.scroll_layout.addStretch()
+        self.scroll_area.setWidget(self.scroll_content)
+        devices_layout.addWidget(self.scroll_area)
+        
+        layout.addWidget(self.devices_frame)
+
+        # Botón cerrar
+        btn_close = QPushButton("Cerrar")
+        btn_close.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        btn_close.setMinimumHeight(40)
+        btn_close.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_ACCENT};
+                color: white;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #106EBE;
+            }}
+        """)
+        btn_close.clicked.connect(self.close)
+        layout.addWidget(btn_close)
+    
+    def _on_scan_finished(self, result):
+        """Callback cuando termina el escaneo de dispositivos"""
+        # Limpiar layout
+        for i in reversed(range(self.scroll_layout.count())):
+            item = self.scroll_layout.itemAt(i)
+            if item.widget():
+                item.widget().setParent(None)
+        
+        if result['success']:
+            # Actualizar información de capacidad
+            connected_text = f"📱 Dispositivos conectados: {result['total_devices']}"
+            self.connected_lbl.setText(connected_text)
+            
+            capacity_text = f"🚀 Capacidad máxima: {result['max_devices']} dispositivos"
+            self.capacity_lbl.setText(capacity_text)
+            
+            # Color según uso
+            usage = result['usage_percentage']
+            usage_color = COLOR_SUCCESS if usage < 60 else COLOR_WARNING if usage < 85 else COLOR_ERROR
+            usage_text = f"📈 Uso de red: <span style='color: {usage_color};'>{usage}%</span>"
+            self.usage_lbl.setText(usage_text)
+            
+            # Mostrar dispositivos
+            if result['devices']:
+                for device in result['devices']:
+                    device_card = self._create_device_card(device)
+                    self.scroll_layout.addWidget(device_card)
+            else:
+                no_devices = QLabel("❌ No se encontraron dispositivos en la red")
+                no_devices.setFont(QFont("Segoe UI", 11))
+                no_devices.setStyleSheet(f"color: {COLOR_MUTED}; padding: 30px;")
+                no_devices.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.scroll_layout.addWidget(no_devices)
+        else:
+            error_text = f"❌ Error: {result['error']}"
+            self.connected_lbl.setText(error_text)
+            
+            error_msg = QLabel("No se pudo escanear la red. Verifica tu conexión.")
+            error_msg.setFont(QFont("Segoe UI", 11))
+            error_msg.setStyleSheet(f"color: {COLOR_ERROR}; padding: 30px;")
+            error_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.scroll_layout.addWidget(error_msg)
+        
+        self.scroll_layout.addStretch()
+    
+    def _create_device_card(self, device: Dict) -> QFrame:
+        """Crea una tarjeta para mostrar información del dispositivo"""
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border: 1px solid {COLOR_CARD_BORDER};
+                padding: 12px;
+            }}
+        """)
+        
+        layout = QHBoxLayout()
+        layout.setContentsMargins(10, 8, 10, 8)
+        card.setLayout(layout)
+        
+        # Icono y tipo
+        type_lbl = QLabel(device.get('type', '💻 Dispositivo'))
+        type_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        type_lbl.setStyleSheet(f"color: {COLOR_ACCENT}; min-width: 120px;")
+        layout.addWidget(type_lbl)
+        
+        # Información del dispositivo
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        
+        ip_lbl = QLabel(f"📍 IP: {device['ip']}")
+        ip_lbl.setFont(QFont("Segoe UI", 10))
+        
+        mac_lbl = QLabel(f"🔗 MAC: {device['mac']}")
+        mac_lbl.setFont(QFont("Segoe UI", 9))
+        mac_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        
+        vendor_lbl = QLabel(f"🏭 {device['vendor']}")
+        vendor_lbl.setFont(QFont("Segoe UI", 9))
+        vendor_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        
+        info_layout.addWidget(ip_lbl)
+        info_layout.addWidget(mac_lbl)
+        info_layout.addWidget(vendor_lbl)
+        layout.addLayout(info_layout)
+        
+        layout.addStretch()
+        
+        return card
 
 # ----------------- Diálogo de Detalles Profesional -----------------
 class NetworkDetailsDialog(QDialog):
@@ -444,13 +710,36 @@ class NetworkDetailsDialog(QDialog):
             }}
         """)
 
+        # Botón de ver dispositivos
+        self.btn_devices = QPushButton("📱 Ver Dispositivos Conectados")
+        self.btn_devices.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.btn_devices.setMinimumHeight(45)
+        self.btn_devices.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #FFB900;
+                color: black;
+                padding: 12px 20px;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #FFA500;
+            }}
+            QPushButton:pressed {{
+                background-color: #CC9200;
+            }}
+        """)
+
         buttons_layout.addWidget(self.btn_tecn)
         buttons_layout.addWidget(self.btn_proto)
+        buttons_layout.addWidget(self.btn_devices)
         outer_layout.addWidget(buttons_frame)
 
         # Conectar señales
         self.btn_tecn.clicked.connect(lambda: self._handle_sugerencia("tecnologia"))
         self.btn_proto.clicked.connect(lambda: self._handle_sugerencia("protocolo"))
+        self.btn_devices.clicked.connect(self._show_devices)
 
         # Iniciar búsqueda de fabricante
         self._start_vendor_lookup()
@@ -462,16 +751,20 @@ class NetworkDetailsDialog(QDialog):
         
         self.btn_tecn.setEnabled(vendor_ready and not has_active_suggestions)
         self.btn_proto.setEnabled(vendor_ready and not has_active_suggestions)
+        self.btn_devices.setEnabled(vendor_ready)
 
         if not vendor_ready:
             self.btn_tecn.setText("⏳ Esperando fabricante...")
             self.btn_proto.setText("⏳ Esperando fabricante...")
+            self.btn_devices.setText("⏳ Esperando fabricante...")
         elif has_active_suggestions:
             self.btn_tecn.setText("🔄 Analizando...")
             self.btn_proto.setText("🔄 Analizando...")
+            self.btn_devices.setText("📱 Ver Dispositivos Conectados")
         else:
             self.btn_tecn.setText("🔍 Análisis de Tecnología")
             self.btn_proto.setText("🔒 Análisis de Protocolo")
+            self.btn_devices.setText("📱 Ver Dispositivos Conectados")
 
     def _start_vendor_lookup(self):
         """Iniciar búsqueda de fabricante"""
@@ -517,6 +810,11 @@ class NetworkDetailsDialog(QDialog):
                 titulo = "Análisis de Tecnología" if tipo == "tecnologia" else "Análisis de Protocolo"
                 suggestion_dialog = SuggestionWindow(titulo, result, parent=self)
                 suggestion_dialog.exec()
+
+    def _show_devices(self):
+        """Mostrar diálogo de dispositivos conectados"""
+        dialog = DevicesDialog(self.red_meta, self)
+        dialog.exec()
 
     def closeEvent(self, event):
         """Manejar cierre del diálogo - DETENER TODOS LOS WORKERS"""

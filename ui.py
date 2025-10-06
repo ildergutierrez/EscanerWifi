@@ -159,6 +159,7 @@ class VendorWorker(QThread):
             return
         try:
             vendor = get_vendor(self.bssid)
+            # print("Fabricado:",vendor,"Mac",self.bssid)
         except Exception:
             vendor = "Desconocido"
         
@@ -604,7 +605,7 @@ class MainWindow(QMainWindow):
         # Timer para escaneo automático
         self.timer = QTimer()
         self.timer.timeout.connect(self.lanzar_scan)
-        self.timer.start(3000)
+        self.timer.start(3000) #Cada 3 segundos
         self.lanzar_scan()
 
         # Estilo principal

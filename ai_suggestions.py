@@ -3,7 +3,7 @@ import time
 import random
 
 # ---------------- Configuración OpenRouter ----------------
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 HEADERS = {

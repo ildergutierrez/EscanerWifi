@@ -12,7 +12,28 @@ import ipaddress
 from typing import List, Dict, Optional
 import threading
 import time
+# device_scanner.py
+"""
+Módulo de compatibilidad - redirige a ap_device_scanner.py
+"""
 
+try:
+    from ap_device_scanner import get_connected_devices, get_devices_count
+except ImportError:
+    print("❌ No se pudo importar ap_device_scanner, usando funciones de respaldo")
+    
+    def get_connected_devices(red_info=None):
+        return {
+            'success': False,
+            'error': 'Módulo de escaneo no disponible',
+            'devices': [],
+            'total_devices': 0,
+            'max_devices': 50,
+            'usage_percentage': 0
+        }
+    
+    def get_devices_count(red_info=None):
+        return 0
 class DeviceScanner:
     def __init__(self):
         self.system = platform.system().lower()

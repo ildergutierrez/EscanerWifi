@@ -1,0 +1,293 @@
+{
+  "router_models": {
+    "TP-LINK TECHNOLOGIES CO.,LTD.": {
+      "vendor": "TP-Link",
+      "common_models": [
+        {
+          "model": "Archer C7",
+          "max_devices": 50,
+          "wifi_standard": "AC1750",
+          "mac_prefixes": ["C0:C9:E3", "B0:BE:76", "48:22:54", "3C:64:CF", "40:3F:8C"],
+          "typical_environment": "Hogar/Oficina pequeña"
+        },
+        {
+          "model": "Archer A7",
+          "max_devices": 45,
+          "wifi_standard": "AC1750",
+          "mac_prefixes": ["C0:C9:E3"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "Archer AX10",
+          "max_devices": 75,
+          "wifi_standard": "AX1500",
+          "mac_prefixes": ["C0:C9:E3"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "Archer AX50",
+          "max_devices": 100,
+          "wifi_standard": "AX3000",
+          "mac_prefixes": ["C0:C9:E3"],
+          "typical_environment": "Hogar/Oficina"
+        },
+        {
+          "model": "TL-WR841N",
+          "max_devices": 25,
+          "wifi_standard": "N300",
+          "mac_prefixes": ["C0:C9:E3"],
+          "typical_environment": "Hogar básico"
+        }
+      ]
+    },
+    "Huawei Technologies Co., Ltd": {
+      "vendor": "Huawei",
+      "common_models": [
+        {
+          "model": "WS5200",
+          "max_devices": 40,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["A8:49:4D", "24:A6:5E", "14:46:58"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "AX3 Pro",
+          "max_devices": 80,
+          "wifi_standard": "AX3000",
+          "mac_prefixes": ["A8:49:4D", "24:A6:5E"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "B535",
+          "max_devices": 32,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["A8:49:4D"],
+          "typical_environment": "Móvil"
+        }
+      ]
+    },
+    "D-Link International": {
+      "vendor": "D-Link",
+      "common_models": [
+        {
+          "model": "DIR-825",
+          "max_devices": 40,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["DC:54:AD", "C4:A8:1D"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "DIR-878",
+          "max_devices": 60,
+          "wifi_standard": "AC1900",
+          "mac_prefixes": ["DC:54:AD"],
+          "typical_environment": "Hogar/Oficina"
+        },
+        {
+          "model": "DIR-1960",
+          "max_devices": 80,
+          "wifi_standard": "AX1800",
+          "mac_prefixes": ["DC:54:AD"],
+          "typical_environment": "Hogar/Oficina"
+        }
+      ]
+    },
+    "NETGEAR": {
+      "vendor": "Netgear",
+      "common_models": [
+        {
+          "model": "R7000 Nighthawk",
+          "max_devices": 55,
+          "wifi_standard": "AC1900",
+          "mac_prefixes": ["00:0F:B0"],
+          "typical_environment": "Gaming/Hogar"
+        },
+        {
+          "model": "R8000 Nighthawk",
+          "max_devices": 70,
+          "wifi_standard": "AC3200",
+          "mac_prefixes": ["00:0F:B0"],
+          "typical_environment": "Gaming/Hogar"
+        },
+        {
+          "model": "RAX50 Nighthawk",
+          "max_devices": 90,
+          "wifi_standard": "AX5400",
+          "mac_prefixes": ["00:0F:B0"],
+          "typical_environment": "Gaming/Hogar"
+        }
+      ]
+    },
+    "ASUSTek COMPUTER INC.": {
+      "vendor": "ASUS",
+      "common_models": [
+        {
+          "model": "RT-AC68U",
+          "max_devices": 60,
+          "wifi_standard": "AC1900",
+          "mac_prefixes": ["00:12:EE"],
+          "typical_environment": "Hogar/Gaming"
+        },
+        {
+          "model": "RT-AX88U",
+          "max_devices": 100,
+          "wifi_standard": "AX6000",
+          "mac_prefixes": ["00:12:EE"],
+          "typical_environment": "Gaming/Oficina"
+        },
+        {
+          "model": "RT-AC53",
+          "max_devices": 35,
+          "wifi_standard": "AC750",
+          "mac_prefixes": ["00:12:EE"],
+          "typical_environment": "Hogar básico"
+        }
+      ]
+    },
+    "Xiaomi Communications Co Ltd": {
+      "vendor": "Xiaomi",
+      "common_models": [
+        {
+          "model": "Mi Router 4A",
+          "max_devices": 35,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["64:09:80"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "AX3600",
+          "max_devices": 95,
+          "wifi_standard": "AX3600",
+          "mac_prefixes": ["64:09:80"],
+          "typical_environment": "Hogar"
+        },
+        {
+          "model": "Mi Router 4C",
+          "max_devices": 20,
+          "wifi_standard": "N300",
+          "mac_prefixes": ["64:09:80"],
+          "typical_environment": "Hogar básico"
+        }
+      ]
+    },
+    "Cisco Systems, Inc": {
+      "vendor": "Cisco/Linksys",
+      "common_models": [
+        {
+          "model": "EA7500",
+          "max_devices": 50,
+          "wifi_standard": "AC1900",
+          "mac_prefixes": ["00:1D:0F"],
+          "typical_environment": "Hogar/Oficina"
+        },
+        {
+          "model": "EA9500",
+          "max_devices": 75,
+          "wifi_standard": "AC5400",
+          "mac_prefixes": ["00:1D:0F"],
+          "typical_environment": "Oficina"
+        }
+      ]
+    },
+    "zte corporation": {
+      "vendor": "ZTE",
+      "common_models": [
+        {
+          "model": "MF286D",
+          "max_devices": 32,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["9C:E9:1C", "EC:6C:B5"],
+          "typical_environment": "Móvil/Hogar"
+        },
+        {
+          "model": "ZXHN H267A",
+          "max_devices": 40,
+          "wifi_standard": "AC1200",
+          "mac_prefixes": ["9C:E9:1C"],
+          "typical_environment": "Hogar"
+        }
+      ]
+    },
+    "Apple, Inc.": {
+      "vendor": "Apple",
+      "common_models": [
+        {
+          "model": "AirPort Extreme",
+          "max_devices": 50,
+          "wifi_standard": "AC",
+          "mac_prefixes": ["00:23:AE", "00:26:BB", "04:15:52"],
+          "typical_environment": "Hogar/Oficina"
+        },
+        {
+          "model": "AirPort Express",
+          "max_devices": 10,
+          "wifi_standard": "N",
+          "mac_prefixes": ["00:23:AE"],
+          "typical_environment": "Extensor"
+        }
+      ]
+    },
+    "Intel Corporate": {
+      "vendor": "Intel",
+      "common_models": [
+        {
+          "model": "Intel Gateway",
+          "max_devices": 25,
+          "wifi_standard": "AC",
+          "mac_prefixes": ["00:0D:3A", "00:13:CE", "28:16:AD"],
+          "typical_environment": "IoT/Industrial"
+        }
+      ]
+    },
+    "Samsung Electronics Co.,Ltd": {
+      "vendor": "Samsung",
+      "common_models": [
+        {
+          "model": "Samsung SmartThings Hub",
+          "max_devices": 30,
+          "wifi_standard": "AC",
+          "mac_prefixes": ["AC:5A:14"],
+          "typical_environment": "Hogar inteligente"
+        }
+      ]
+    },
+    "Dell Inc.": {
+      "vendor": "Dell",
+      "common_models": [
+        {
+          "model": "Dell Networking W-Series",
+          "max_devices": 100,
+          "wifi_standard": "AC",
+          "mac_prefixes": ["00:1C:42"],
+          "typical_environment": "Empresarial"
+        }
+      ]
+    },
+    "Raspberry Pi Trading Ltd": {
+      "vendor": "Raspberry Pi",
+      "common_models": [
+        {
+          "model": "Raspberry Pi (como router)",
+          "max_devices": 15,
+          "wifi_standard": "N/AC",
+          "mac_prefixes": ["B8:27:EB"],
+          "typical_environment": "Desarrollo/Hobby"
+        }
+      ]
+    }
+  },
+  "technology_estimations": {
+    "WiFi 6 (AX)": {"max_devices": 100, "confidence": "high"},
+    "WiFi 5 (AC)": {"max_devices": 60, "confidence": "medium"},
+    "WiFi 4 (N)": {"max_devices": 25, "confidence": "medium"},
+    "WiFi 3 (G)": {"max_devices": 15, "confidence": "low"},
+    "Unknown": {"max_devices": 30, "confidence": "low"}
+  },
+  "default_capacities": {
+    "home_basic": 25,
+    "home_standard": 50,
+    "home_premium": 75,
+    "office_small": 100,
+    "enterprise": 150
+  }
+}

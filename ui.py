@@ -665,19 +665,19 @@ class DevicesDialog(QDialog):
         speed_layout.addWidget(speed_title)
         
         # Velocidad de bajada
-        self.download_lbl = QLabel("⬇️ --.- Mbps")
+        self.download_lbl = QLabel("⬇ --.- Mbps")
         self.download_lbl.setFont(QFont("Segoe UI", 10))
         self.download_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
         speed_layout.addWidget(self.download_lbl)
         
         # Velocidad de subida
-        self.upload_lbl = QLabel("⬆️ --.- Mbps")
+        self.upload_lbl = QLabel("⬆ --.- Mbps")
         self.upload_lbl.setFont(QFont("Segoe UI", 10))
         self.upload_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
         speed_layout.addWidget(self.upload_lbl)
         
         # Ping
-        self.ping_lbl = QLabel("🏓 --- ms")
+        self.ping_lbl = QLabel("Ping 🏓 --- ms")
         self.ping_lbl.setFont(QFont("Segoe UI", 10))
         self.ping_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
         speed_layout.addWidget(self.ping_lbl)
@@ -715,7 +715,7 @@ class DevicesDialog(QDialog):
         self.devices_count_lbl = QLabel("📱 Conectados: --/-- dispositivos")
         self.devices_count_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
             
-        self.usage_lbl = QLabel("📈 Uso: --%")
+        self.usage_lbl = QLabel("📈 R Conexión: --%")
         self.usage_lbl.setFont(QFont("Segoe UI", 11))
             
         devices_info_layout.addWidget(self.devices_count_lbl)
@@ -804,7 +804,7 @@ class DevicesDialog(QDialog):
         
         layout.addLayout(buttons_layout)
 
-        # Guardar el estado actual para uso posterior si es necesario
+        # Guardar el estado actual para | posterior si es necesario
         self.is_currently_connected = is_currently_connected
 
     def _start_speed_test(self):
@@ -814,9 +814,9 @@ class DevicesDialog(QDialog):
             
         self.speed_btn.setEnabled(False)
         self.speed_btn.setText("⏳ Midendo...")
-        self.download_lbl.setText("Descarga ⬇:  ...")
-        self.upload_lbl.setText("Subiida ⬆:  ...")
-        self.ping_lbl.setText("ping/Latencia 🏓 ...")
+        self.download_lbl.setText("⬇:  ...")
+        self.upload_lbl.setText("⬆:  ...")
+        self.ping_lbl.setText("ping 🏓 ...")
         
         self.speed_worker = SpeedTestWorker()
         self.speed_worker.finished.connect(self._on_speed_test_finished)
@@ -837,13 +837,13 @@ class DevicesDialog(QDialog):
             upload_color = COLOR_SUCCESS if upload > 5 else COLOR_WARNING if upload > 2 else COLOR_ERROR
             ping_color = COLOR_SUCCESS if ping < 50 else COLOR_WARNING if ping < 100 else COLOR_ERROR
             
-            self.download_lbl.setText(f"⬇️ <span style='color: {download_color};'>{download:.1f}</span> Mbps")
-            self.upload_lbl.setText(f"⬆️ <span style='color: {upload_color};'>{upload:.1f}</span> Mbps")
-            self.ping_lbl.setText(f"🏓 <span style='color: {ping_color};'>{ping:.1f}</span> ms")
+            self.download_lbl.setText(f"⬇ <span style='color: {download_color};'>{download:.1f}</span> Mbps")
+            self.upload_lbl.setText(f"⬆ <span style='color: {upload_color};'>{upload:.1f}</span> Mbps")
+            self.ping_lbl.setText(f"Ping🏓 <span style='color: {ping_color};'>{ping:.1f}</span> ms")
         else:
-            self.download_lbl.setText("⬇️ Error")
-            self.upload_lbl.setText("⬆️ Error")
-            self.ping_lbl.setText("🏓 Error")
+            self.download_lbl.setText("⬇ Error")
+            self.upload_lbl.setText("⬆ Error")
+            self.ping_lbl.setText("Ping 🏓 Error")
         
         self.speed_btn.setEnabled(True)
         self.speed_btn.setText("📊 Medir Velocidad")
@@ -852,9 +852,9 @@ class DevicesDialog(QDialog):
     def _on_speed_test_error(self, error_msg):
         """Callback cuando hay error en el test de velocidad"""
         print(f"Error en test de velocidad: {error_msg}")
-        self.download_lbl.setText("⬇️ Error")
-        self.upload_lbl.setText("⬆️ Error")
-        self.ping_lbl.setText("🏓 Error")
+        self.download_lbl.setText("⬇ Error")
+        self.upload_lbl.setText("⬆ Error")
+        self.ping_lbl.setText("Ping 🏓 Error")
         
         self.speed_btn.setEnabled(True)
         self.speed_btn.setText("📊 Medir Velocidad")
@@ -989,7 +989,7 @@ class DevicesDialog(QDialog):
         
         # Actualizar contadores
         self.devices_count_lbl.setText(f"📱 Conectados: 0/{self.router_capacity} dispositivos")
-        self.usage_lbl.setText("📈 rendimiento Conexión: 0%")
+        self.usage_lbl.setText("📈 R Conexión: 0%")
         
         self.scroll_layout.addStretch()
     
@@ -1020,7 +1020,7 @@ class DevicesDialog(QDialog):
             self.devices_count_lbl.setText(f"Conectados: {self.current_devices}/{max_devices} dispositivos")
             usage = min(100, int((self.current_devices / max_devices) * 100)) if max_devices > 0 else 0
             usage_color = COLOR_SUCCESS if usage < 60 else COLOR_WARNING if usage < 85 else COLOR_ERROR
-            self.usage_lbl.setText(f"Uso: <span style='color: {usage_color};'>{usage}%</span>")
+            self.usage_lbl.setText(f"R Conexión: <span style='color: {usage_color};'>{usage}%</span>")
 
             # Mostrar dispositivos si hay
             if result.get('scan_performed', False) and result.get('devices'):

@@ -4,6 +4,7 @@ Sistema mejorado con múltiples fuentes y detección precisa de cualquier marca.
 Incluye detección de MACs aleatorias y recuperación de MAC original.
 """
 
+from os import system
 import requests
 import json
 import os
@@ -14,6 +15,26 @@ import platform
 import socket
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Tuple
+system('cls')
+# Importar el detector de MACs con manejo de errores mejorado
+try:
+    from mac_detector import detect_original_mac
+    MAC_DETECTOR_AVAILABLE = True
+    print("✅ mac_detector importado correctamente")
+except ImportError as e:
+    print(f"❌ No se pudo importar mac_detector: {e}")
+    MAC_DETECTOR_AVAILABLE = False
+    
+    # Fallback si no está disponible
+    def detect_original_mac(ssid: str, bssid: str = None) -> Dict:
+        return {
+            'original_mac': bssid,
+            'original_vendor': 'Desconocido',
+            'current_mac': bssid,
+            'is_random': False,
+            'confidence': 'bajo',
+            'error': 'mac_detector no disponible'
+        }
 
 class MACDetector:
     def __init__(self):
@@ -22,8 +43,31 @@ class MACDetector:
     def detect_original_mac(self, target_ssid: str, target_bssid: str = None) -> Dict[str, Optional[str]]:
         """
         Detecta la MAC original del router cuando se usa MAC aleatoria.
-        MODIFICADO: No requiere estar conectado exactamente al mismo BSSID
+        MODIFICADO: Usa mac_detector.py si está disponible
         """
+        try:
+            # Si mac_detector está disponible, usarlo
+            if MAC_DETECTOR_AVAILABLE:
+                print("🔍 Usando mac_detector externo...")
+                detection_result = detect_original_mac(target_ssid, target_bssid)
+                
+                # Si la detección fue exitosa, retornar el resultado
+                if (detection_result.get('original_mac') and 
+                    detection_result['original_mac'] != target_bssid and
+                    detection_result.get('confidence') in ['alto', 'medio']):
+                    return detection_result
+                else:
+                    print("⚠️ mac_detector no pudo detectar, usando métodos locales...")
+            
+            # Si mac_detector no está disponible o no pudo detectar, usar métodos locales
+            return self._fallback_detection(target_ssid, target_bssid)
+                
+        except Exception as e:
+            print(f"❌ Error en detección de MAC: {e}")
+            return self._fallback_detection(target_ssid, target_bssid)
+
+    def _fallback_detection(self, target_ssid: str, target_bssid: str = None) -> Dict[str, Optional[str]]:
+        """Método de fallback usando detección local"""
         try:
             from network_status import get_connected_wifi_info
             
@@ -64,7 +108,6 @@ class MACDetector:
                 }
             
             # Si es MAC aleatoria, intentar detectar la MAC original
-            # USAR LA MAC ACTUAL DEL USUARIO COMO REFERENCIA
             original_mac = self._find_original_mac(target_ssid, current_mac)
             
             if original_mac:
@@ -100,21 +143,43 @@ class MACDetector:
                 'error': f'Error en detección: {str(e)}'
             }
     
+    # En la misma clase VendorLookup, mejora el método _is_random_mac
+
     def _is_random_mac(self, mac: str) -> bool:
-        """Verifica si una MAC es aleatoria."""
+        """Verifica si una MAC es aleatoria de manera más precisa."""
         try:
             if not mac:
                 return False
                 
-            parts = mac.upper().replace('-', ':').replace('.', ':').split(':')
+            mac_clean = mac.upper().replace('-', ':').replace('.', ':')
+            parts = mac_clean.split(':')
+            
             if len(parts) < 3:
                 return False
             
+            # Primer octeto en hexadecimal
             first_octet = int(parts[0], 16)
-            is_local = (first_octet & 0b00000010) != 0
-            return is_local
             
-        except Exception:
+            # Bit 1 (segundo bit menos significativo) = 1 indica MAC local/aleatoria
+            is_local = (first_octet & 0b00000010) != 0
+            
+            print(f"🔍 [VendorLookup] MAC: {mac_clean}, Primer octeto: {first_octet:02x}, Es local: {is_local}")
+            
+            # Patrones comunes de MACs aleatorias
+            random_indicators = [
+                mac_clean.startswith('02:'),
+                mac_clean.startswith('06:'), 
+                mac_clean.startswith('0A:'),
+                mac_clean.startswith('0E:'),
+                is_local
+            ]
+            
+            result = any(random_indicators)
+            print(f"🔍 [VendorLookup] ¿Es aleatoria? {result}")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Error en _is_random_mac: {e}")
             return False
     
     def _basic_lookup(self, mac: str) -> str:
@@ -694,46 +759,129 @@ class VendorLookup:
             pass
         return "Desconocido"
     
-    def get_enhanced_vendor_info(self, bssid: str, ssid: str = None) -> Dict[str, Optional[str]]:
-        """
-        Obtiene información mejorada del fabricante, detectando MACs aleatorias.
-        """
-        try:
-            basic_vendor = self.lookup(bssid, ssid)
+    # En vendor_lookup.py - modifica la función get_enhanced_vendor_info
+# En vendor_lookup.py - REEMPLAZA las funciones relacionadas con MAC aleatoria
+
+def get_enhanced_vendor_info(bssid: str, ssid: str = None) -> Dict[str, Optional[str]]:
+    """
+    Obtiene información completa del fabricante incluyendo detección de MACs aleatorias.
+    """
+    try:
+        lookup = _get_vendor_lookup()
+        print(f"🔍 [VendorLookup] Iniciando enhanced info para: {bssid}, SSID: {ssid}")
+        
+        # Paso 1: Obtener vendor básico
+        basic_vendor = lookup.lookup(bssid)
+        print(f"🔍 [VendorLookup] Vendor básico: {basic_vendor}")
+        
+        # Paso 2: Verificar si es MAC aleatoria
+        is_random = lookup._is_random_mac(bssid)
+        print(f"🔍 [VendorLookup] ¿Es MAC aleatoria? {is_random}")
+        
+        # Si no es aleatoria o no tenemos SSID, retornar info básica
+        if not is_random or not ssid:
+            can_scan = basic_vendor != "Desconocido" and basic_vendor != "MAC Aleatoria"
+            return {
+                'mac': bssid,
+                'vendor': basic_vendor,
+                'is_random': False,
+                'original_mac': bssid,
+                'original_vendor': basic_vendor,
+                'can_scan_devices': can_scan,
+                'confidence': 'alto'
+            }
+        
+        # Paso 3: Si es MAC aleatoria y tenemos SSID, usar mac_detector
+        print(f"🔍 [VendorLookup] Detectada MAC aleatoria, buscando MAC original...")
+        detection_result = lookup.mac_detector.detect_original_mac(ssid, bssid)
+        print(f"🔍 [VendorLookup] Resultado detección: {detection_result}")
+        
+        # Paso 4: Procesar el resultado de la detección
+        if detection_result.get('original_mac') and detection_result['original_mac'] != bssid:
+            original_mac = detection_result['original_mac']
+            print(f"🔍 [VendorLookup] MAC original encontrada: {original_mac}")
             
-            if basic_vendor != "MAC Aleatoria" or not ssid:
-                return {
-                    'mac': bssid,
-                    'vendor': basic_vendor,
-                    'is_random': False,
-                    'original_mac': bssid,
-                    'original_vendor': basic_vendor,
-                    'confidence': 'alto'
-                }
+            # Hacer lookup del vendor para la MAC original
+            original_vendor = lookup.lookup(original_mac)
+            print(f"🔍 [VendorLookup] Vendor original: {original_vendor}")
             
-            # Si es MAC aleatoria y tenemos SSID, detectar MAC original
-            detection_result = self.mac_detector.detect_original_mac(ssid, bssid)
+            # Determinar si podemos escanear dispositivos
+            can_scan = original_vendor != "Desconocido" and original_vendor != "MAC Aleatoria"
             
+            return {
+                'mac': bssid,
+                'vendor': f"{original_vendor} (MAC Original)" if original_vendor != "Desconocido" else "MAC Aleatoria",
+                'is_random': True,
+                'original_mac': original_mac,
+                'original_vendor': original_vendor,
+                'can_scan_devices': can_scan,
+                'confidence': detection_result.get('confidence', 'alto'),
+                'note': detection_result.get('note', 'MAC original detectada')
+            }
+        else:
+            # No se pudo detectar MAC original
+            print(f"🔍 [VendorLookup] No se pudo detectar MAC original")
             return {
                 'mac': bssid,
                 'vendor': basic_vendor,
                 'is_random': True,
-                'original_mac': detection_result['original_mac'],
-                'original_vendor': detection_result['original_vendor'],
-                'confidence': detection_result['confidence'],
-                'note': detection_result.get('note')
+                'original_mac': bssid,
+                'original_vendor': basic_vendor,
+                'can_scan_devices': False,
+                'confidence': detection_result.get('confidence', 'bajo'),
+                'note': detection_result.get('note', 'No se pudo detectar MAC original')
             }
             
-        except Exception as e:
-            return {
-                'mac': bssid,
-                'vendor': self.lookup(bssid),
-                'is_random': False,
-                'original_mac': bssid,
-                'original_vendor': self.lookup(bssid),
-                'confidence': 'bajo',
-                'error': str(e)
-            }
+    except Exception as e:
+        print(f"❌ [VendorLookup] Error en get_enhanced_vendor_info: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            'mac': bssid,
+            'vendor': get_vendor(bssid),
+            'is_random': False,
+            'original_mac': bssid,
+            'original_vendor': get_vendor(bssid),
+            'can_scan_devices': False,
+            'confidence': 'bajo',
+            'error': str(e)
+        }
+
+# También mejora el método _is_random_mac en la clase VendorLookup
+def _is_random_mac(self, mac: str) -> bool:
+    """Verifica si una MAC es aleatoria de manera más precisa."""
+    try:
+        if not mac:
+            return False
+            
+        mac_clean = mac.upper().replace('-', ':').replace('.', ':')
+        parts = mac_clean.split(':')
+        
+        if len(parts) < 3:
+            return False
+        
+        # Primer octeto en hexadecimal
+        first_octet = int(parts[0], 16)
+        
+        # Bit 1 (segundo bit menos significativo) = 1 indica MAC local/aleatoria
+        is_local = (first_octet & 0b00000010) != 0
+        
+        # Patrones comunes de MACs aleatorias
+        random_indicators = [
+            mac_clean.startswith('02:'),
+            mac_clean.startswith('06:'), 
+            mac_clean.startswith('0A:'),
+            mac_clean.startswith('0E:'),
+            is_local
+        ]
+        
+        result = any(random_indicators)
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error en _is_random_mac: {e}")
+        return False
 
 # Instancia global singleton
 _vendor_lookup = None
@@ -770,14 +918,82 @@ def get_enhanced_vendor_info(bssid: str, ssid: str = None) -> Dict[str, Optional
     """
     try:
         lookup = _get_vendor_lookup()
-        return lookup.get_enhanced_vendor_info(bssid, ssid)
+        print(f"🔍 [VendorLookup] Iniciando enhanced info para: {bssid}, SSID: {ssid}")
+        
+        # Paso 1: Obtener vendor básico
+        basic_vendor = lookup.lookup(bssid)
+        print(f"🔍 [VendorLookup] Vendor básico: {basic_vendor}")
+        
+        # Paso 2: Verificar si es MAC aleatoria
+        is_random = lookup._is_random_mac(bssid)
+        print(f"🔍 [VendorLookup] ¿Es MAC aleatoria? {is_random}")
+        
+        # Si no es aleatoria o no tenemos SSID, retornar info básica
+        if not is_random or not ssid:
+            can_scan = basic_vendor != "Desconocido" and basic_vendor != "MAC Aleatoria"
+            return {
+                'mac': bssid,
+                'vendor': basic_vendor,
+                'is_random': False,
+                'original_mac': bssid,
+                'original_vendor': basic_vendor,
+                'can_scan_devices': can_scan,
+                'confidence': 'alto'
+            }
+        
+        # Paso 3: Si es MAC aleatoria y tenemos SSID, usar mac_detector
+        print(f"🔍 [VendorLookup] Detectada MAC aleatoria, buscando MAC original...")
+        detection_result = lookup.mac_detector.detect_original_mac(ssid, bssid)
+        print(f"🔍 [VendorLookup] Resultado detección: {detection_result}")
+        
+        # Paso 4: Procesar el resultado de la detección
+        if detection_result.get('original_mac') and detection_result['original_mac'] != bssid:
+            original_mac = detection_result['original_mac']
+            print(f"🔍 [VendorLookup] MAC original encontrada: {original_mac}")
+            
+            # Hacer lookup del vendor para la MAC original
+            original_vendor = lookup.lookup(original_mac)
+            print(f"🔍 [VendorLookup] Vendor original: {original_vendor}")
+            
+            # Determinar si podemos escanear dispositivos
+            can_scan = original_vendor != "Desconocido" and original_vendor != "MAC Aleatoria"
+            
+            return {
+                'mac': bssid,
+                'vendor': f"{original_vendor} (MAC Original)" if original_vendor != "Desconocido" else "MAC Aleatoria",
+                'is_random': True,
+                'original_mac': original_mac,
+                'original_vendor': original_vendor,
+                'can_scan_devices': can_scan,
+                'confidence': detection_result.get('confidence', 'alto'),
+                'note': detection_result.get('note', 'MAC original detectada')
+            }
+        else:
+            # No se pudo detectar MAC original
+            print(f"🔍 [VendorLookup] No se pudo detectar MAC original")
+            return {
+                'mac': bssid,
+                'vendor': basic_vendor,
+                'is_random': True,
+                'original_mac': bssid,
+                'original_vendor': basic_vendor,
+                'can_scan_devices': False,
+                'confidence': detection_result.get('confidence', 'bajo'),
+                'note': detection_result.get('note', 'No se pudo detectar MAC original')
+            }
+            
     except Exception as e:
+        print(f"❌ [VendorLookup] Error en get_enhanced_vendor_info: {e}")
+        import traceback
+        traceback.print_exc()
+        
         return {
             'mac': bssid,
             'vendor': get_vendor(bssid),
             'is_random': False,
             'original_mac': bssid,
             'original_vendor': get_vendor(bssid),
+            'can_scan_devices': False,
             'confidence': 'bajo',
             'error': str(e)
         }
@@ -814,6 +1030,7 @@ def get_database_info() -> dict:
         return {"error": f"No disponible: {e}"}
 
 # Pruebas del módulo
+# En la parte final de vendor_lookup.py (donde están las pruebas)
 if __name__ == "__main__":
     print("🚀 Inicializando vendor_lookup con detección de MACs aleatorias...")
     _get_vendor_lookup()
@@ -860,12 +1077,13 @@ if __name__ == "__main__":
         vendor_basic = get_vendor(mac)
         print(f"   Vendor básico: {vendor_basic}")
         
-        # Información mejorada
-        enhanced_info = get_enhanced_vendor_info(mac, ssid)
+        # Información mejorada - LLAMAR A LA FUNCIÓN GLOBAL
+        enhanced_info = get_enhanced_vendor_info(mac, ssid)  # ← Esta es la función global
         print(f"   Vendor mejorado: {enhanced_info['vendor']}")
         print(f"   ¿Es MAC aleatoria?: {enhanced_info['is_random']}")
         print(f"   MAC original: {enhanced_info['original_mac']}")
         print(f"   Vendor original: {enhanced_info['original_vendor']}")
+        print(f"   ¿Puede escanear dispositivos?: {enhanced_info.get('can_scan_devices', False)}")
         print(f"   Confianza: {enhanced_info['confidence']}")
         
         if enhanced_info.get('note'):

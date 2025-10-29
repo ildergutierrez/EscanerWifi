@@ -473,7 +473,7 @@ def get_connected_devices(red_info: Dict = None) -> Dict:
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": str(e),  # <- SIEMPRE incluir esta clave
             "devices": [],
             "total_devices": 0,
             "max_devices": red_info.get("router_max_devices", 50) if red_info else 50,

@@ -7,35 +7,49 @@
           "model": "Archer C7",
           "max_devices": 50,
           "wifi_standard": "AC1750",
-          "mac_prefixes": ["C0:C9:E3", "B0:BE:76", "48:22:54", "3C:64:CF", "40:3F:8C"],
+          "mac_prefixes": [
+            "C0:C9:E3",
+            "B0:BE:76",
+            "48:22:54",
+            "3C:64:CF",
+            "40:3F:8C"
+          ],
           "typical_environment": "Hogar/Oficina pequeña"
         },
         {
           "model": "Archer A7",
           "max_devices": 45,
           "wifi_standard": "AC1750",
-          "mac_prefixes": ["C0:C9:E3"],
+          "mac_prefixes": [
+            "C0:C9:E3"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "Archer AX10",
           "max_devices": 75,
           "wifi_standard": "AX1500",
-          "mac_prefixes": ["C0:C9:E3"],
+          "mac_prefixes": [
+            "C0:C9:E3"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "Archer AX50",
           "max_devices": 100,
           "wifi_standard": "AX3000",
-          "mac_prefixes": ["C0:C9:E3"],
+          "mac_prefixes": [
+            "C0:C9:E3"
+          ],
           "typical_environment": "Hogar/Oficina"
         },
         {
           "model": "TL-WR841N",
           "max_devices": 25,
           "wifi_standard": "N300",
-          "mac_prefixes": ["C0:C9:E3"],
+          "mac_prefixes": [
+            "C0:C9:E3"
+          ],
           "typical_environment": "Hogar básico"
         }
       ]
@@ -47,21 +61,30 @@
           "model": "WS5200",
           "max_devices": 40,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["A8:49:4D", "24:A6:5E", "14:46:58"],
+          "mac_prefixes": [
+            "A8:49:4D",
+            "24:A6:5E",
+            "14:46:58"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "AX3 Pro",
           "max_devices": 80,
           "wifi_standard": "AX3000",
-          "mac_prefixes": ["A8:49:4D", "24:A6:5E"],
+          "mac_prefixes": [
+            "A8:49:4D",
+            "24:A6:5E"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "B535",
           "max_devices": 32,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["A8:49:4D"],
+          "mac_prefixes": [
+            "A8:49:4D"
+          ],
           "typical_environment": "Móvil"
         }
       ]
@@ -73,21 +96,28 @@
           "model": "DIR-825",
           "max_devices": 40,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["DC:54:AD", "C4:A8:1D"],
+          "mac_prefixes": [
+            "DC:54:AD",
+            "C4:A8:1D"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "DIR-878",
           "max_devices": 60,
           "wifi_standard": "AC1900",
-          "mac_prefixes": ["DC:54:AD"],
+          "mac_prefixes": [
+            "DC:54:AD"
+          ],
           "typical_environment": "Hogar/Oficina"
         },
         {
           "model": "DIR-1960",
           "max_devices": 80,
           "wifi_standard": "AX1800",
-          "mac_prefixes": ["DC:54:AD"],
+          "mac_prefixes": [
+            "DC:54:AD"
+          ],
           "typical_environment": "Hogar/Oficina"
         }
       ]
@@ -99,21 +129,27 @@
           "model": "R7000 Nighthawk",
           "max_devices": 55,
           "wifi_standard": "AC1900",
-          "mac_prefixes": ["00:0F:B0"],
+          "mac_prefixes": [
+            "00:0F:B0"
+          ],
           "typical_environment": "Gaming/Hogar"
         },
         {
           "model": "R8000 Nighthawk",
           "max_devices": 70,
           "wifi_standard": "AC3200",
-          "mac_prefixes": ["00:0F:B0"],
+          "mac_prefixes": [
+            "00:0F:B0"
+          ],
           "typical_environment": "Gaming/Hogar"
         },
         {
           "model": "RAX50 Nighthawk",
           "max_devices": 90,
           "wifi_standard": "AX5400",
-          "mac_prefixes": ["00:0F:B0"],
+          "mac_prefixes": [
+            "00:0F:B0"
+          ],
           "typical_environment": "Gaming/Hogar"
         }
       ]
@@ -125,21 +161,27 @@
           "model": "RT-AC68U",
           "max_devices": 60,
           "wifi_standard": "AC1900",
-          "mac_prefixes": ["00:12:EE"],
+          "mac_prefixes": [
+            "00:12:EE"
+          ],
           "typical_environment": "Hogar/Gaming"
         },
         {
           "model": "RT-AX88U",
           "max_devices": 100,
           "wifi_standard": "AX6000",
-          "mac_prefixes": ["00:12:EE"],
+          "mac_prefixes": [
+            "00:12:EE"
+          ],
           "typical_environment": "Gaming/Oficina"
         },
         {
           "model": "RT-AC53",
           "max_devices": 35,
           "wifi_standard": "AC750",
-          "mac_prefixes": ["00:12:EE"],
+          "mac_prefixes": [
+            "00:12:EE"
+          ],
           "typical_environment": "Hogar básico"
         }
       ]
@@ -151,21 +193,27 @@
           "model": "Mi Router 4A",
           "max_devices": 35,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["64:09:80"],
+          "mac_prefixes": [
+            "64:09:80"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "AX3600",
           "max_devices": 95,
           "wifi_standard": "AX3600",
-          "mac_prefixes": ["64:09:80"],
+          "mac_prefixes": [
+            "64:09:80"
+          ],
           "typical_environment": "Hogar"
         },
         {
           "model": "Mi Router 4C",
           "max_devices": 20,
           "wifi_standard": "N300",
-          "mac_prefixes": ["64:09:80"],
+          "mac_prefixes": [
+            "64:09:80"
+          ],
           "typical_environment": "Hogar básico"
         }
       ]
@@ -177,14 +225,18 @@
           "model": "EA7500",
           "max_devices": 50,
           "wifi_standard": "AC1900",
-          "mac_prefixes": ["00:1D:0F"],
+          "mac_prefixes": [
+            "00:1D:0F"
+          ],
           "typical_environment": "Hogar/Oficina"
         },
         {
           "model": "EA9500",
           "max_devices": 75,
           "wifi_standard": "AC5400",
-          "mac_prefixes": ["00:1D:0F"],
+          "mac_prefixes": [
+            "00:1D:0F"
+          ],
           "typical_environment": "Oficina"
         }
       ]
@@ -196,14 +248,19 @@
           "model": "MF286D",
           "max_devices": 32,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["9C:E9:1C", "EC:6C:B5"],
+          "mac_prefixes": [
+            "9C:E9:1C",
+            "EC:6C:B5"
+          ],
           "typical_environment": "Móvil/Hogar"
         },
         {
           "model": "ZXHN H267A",
           "max_devices": 40,
           "wifi_standard": "AC1200",
-          "mac_prefixes": ["9C:E9:1C"],
+          "mac_prefixes": [
+            "9C:E9:1C"
+          ],
           "typical_environment": "Hogar"
         }
       ]
@@ -215,14 +272,20 @@
           "model": "AirPort Extreme",
           "max_devices": 50,
           "wifi_standard": "AC",
-          "mac_prefixes": ["00:23:AE", "00:26:BB", "04:15:52"],
+          "mac_prefixes": [
+            "00:23:AE",
+            "00:26:BB",
+            "04:15:52"
+          ],
           "typical_environment": "Hogar/Oficina"
         },
         {
           "model": "AirPort Express",
           "max_devices": 10,
           "wifi_standard": "N",
-          "mac_prefixes": ["00:23:AE"],
+          "mac_prefixes": [
+            "00:23:AE"
+          ],
           "typical_environment": "Extensor"
         }
       ]
@@ -234,7 +297,11 @@
           "model": "Intel Gateway",
           "max_devices": 25,
           "wifi_standard": "AC",
-          "mac_prefixes": ["00:0D:3A", "00:13:CE", "28:16:AD"],
+          "mac_prefixes": [
+            "00:0D:3A",
+            "00:13:CE",
+            "28:16:AD"
+          ],
           "typical_environment": "IoT/Industrial"
         }
       ]
@@ -246,7 +313,9 @@
           "model": "Samsung SmartThings Hub",
           "max_devices": 30,
           "wifi_standard": "AC",
-          "mac_prefixes": ["AC:5A:14"],
+          "mac_prefixes": [
+            "AC:5A:14"
+          ],
           "typical_environment": "Hogar inteligente"
         }
       ]
@@ -258,7 +327,9 @@
           "model": "Dell Networking W-Series",
           "max_devices": 100,
           "wifi_standard": "AC",
-          "mac_prefixes": ["00:1C:42"],
+          "mac_prefixes": [
+            "00:1C:42"
+          ],
           "typical_environment": "Empresarial"
         }
       ]
@@ -270,18 +341,336 @@
           "model": "Raspberry Pi (como router)",
           "max_devices": 15,
           "wifi_standard": "N/AC",
-          "mac_prefixes": ["B8:27:EB"],
+          "mac_prefixes": [
+            "B8:27:EB"
+          ],
           "typical_environment": "Desarrollo/Hobby"
+        }
+      ]
+    },
+    "Broadcom Corporation": {
+      "vendor": "Broadcom Corporation",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "76C25E"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "samsung": {
+      "vendor": "samsung",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "001EE1",
+            "0023CC",
+            "002491",
+            "00265F",
+            "0030C1",
+            "0050BA",
+            "080027",
+            "0C1420",
+            "0C715D",
+            "0C8910",
+            "10D07A",
+            "10D38A",
+            "14144B",
+            "18421D",
+            "185936",
+            "1C232C",
+            "1C62B8",
+            "1C66AA",
+            "20D390",
+            "241F2C",
+            "285FDB",
+            "2C0E3D",
+            "2C4401",
+            "303926"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "MAC Aleatoria": {
+      "vendor": "MAC Aleatoria",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "36B5B5",
+            "A643ED"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "dell": {
+      "vendor": "dell",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "001372",
+            "001C23",
+            "00219E",
+            "0024E8",
+            "0025CB",
+            "00265A",
+            "0030C9",
+            "0050BA",
+            "08005F",
+            "0C0D48",
+            "0C2724",
+            "0C413E",
+            "0C5636",
+            "0C7D7C",
+            "0CD292",
+            "0CD746",
+            "100BA9",
+            "1040F3"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "lenovo": {
+      "vendor": "lenovo",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "0010E0",
+            "001422",
+            "0017D5",
+            "001A6B",
+            "001A6C",
+            "001A92",
+            "001CB3",
+            "001D92",
+            "001E68",
+            "001F16",
+            "0021CC",
+            "0022EF",
+            "00248D",
+            "00255D",
+            "0025C1",
+            "0025F3",
+            "0026C7",
+            "0026F3"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "tp-link": {
+      "vendor": "tp-link",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "001478",
+            "001D0F",
+            "0023CD",
+            "0024A5",
+            "0030F3",
+            "0030F6",
+            "0030F7",
+            "0030F8",
+            "0030F9",
+            "0030FA",
+            "0030FB",
+            "0030FC",
+            "0030FD",
+            "0030FE",
+            "0030FF",
+            "0031F6",
+            "0031F7",
+            "0031F8"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "microsoft": {
+      "vendor": "microsoft",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "0014C2",
+            "001D4F",
+            "002248",
+            "00248D",
+            "0025AE",
+            "00264A",
+            "0026AB",
+            "0026AE",
+            "0026CB",
+            "0026CE",
+            "0026F3",
+            "0026F4",
+            "0026F5",
+            "0026F6",
+            "0026F7",
+            "0026F8",
+            "0026F9",
+            "0026FA"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "Guangzhou Shiyuan Electronic Technology Company Limited": {
+      "vendor": "Guangzhou Shiyuan Electronic Technology Company Limited",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "385439"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "SHENZHEN HUAPAI TECHNOLOGY CO., LTD": {
+      "vendor": "SHENZHEN HUAPAI TECHNOLOGY CO.",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "86E81D"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "xiaomi": {
+      "vendor": "xiaomi",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "00E069",
+            "0C1DAF",
+            "14F65A",
+            "284C53",
+            "34CE00",
+            "408A9A",
+            "4C49E3",
+            "5C4A26",
+            "64B473",
+            "6C5F1C",
+            "7C6B33",
+            "8CBE24",
+            "A0CBFD",
+            "B0E235",
+            "C46AB7",
+            "D8C46A",
+            "E4D332",
+            "F4B7E2"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "HUAWEI TECHNOLOGIES CO.,LTD": {
+      "vendor": "HUAWEI TECHNOLOGIES CO.",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "0019C1",
+            "002568",
+            "0034FE",
+            "005A13",
+            "00E0FC",
+            "083E8C",
+            "0C37DC",
+            "0C96BF",
+            "10C61F",
+            "14144B",
+            "1C1D67",
+            "20F3A3",
+            "285FDB",
+            "2CAB00",
+            "30D17E",
+            "348A12",
+            "388345",
+            "3C5A37",
+            "404A03",
+            "4C1FCC",
+            "503275",
+            "549F13",
+            "5C4CA9",
+            "60DE44",
+            "A8494D"
+          ],
+          "typical_environment": "Desconocido"
+        }
+      ]
+    },
+    "AzureWave Technology Inc.": {
+      "vendor": "AzureWave Technology Inc.",
+      "common_models": [
+        {
+          "model": "Desconocido",
+          "max_devices": 30,
+          "wifi_standard": "Desconocido",
+          "mac_prefixes": [
+            "74C63B"
+          ],
+          "typical_environment": "Desconocido"
         }
       ]
     }
   },
   "technology_estimations": {
-    "WiFi 6 (AX)": {"max_devices": 100, "confidence": "high"},
-    "WiFi 5 (AC)": {"max_devices": 60, "confidence": "medium"},
-    "WiFi 4 (N)": {"max_devices": 25, "confidence": "medium"},
-    "WiFi 3 (G)": {"max_devices": 15, "confidence": "low"},
-    "Unknown": {"max_devices": 30, "confidence": "low"}
+    "WiFi 6 (AX)": {
+      "max_devices": 100,
+      "confidence": "high"
+    },
+    "WiFi 5 (AC)": {
+      "max_devices": 60,
+      "confidence": "medium"
+    },
+    "WiFi 4 (N)": {
+      "max_devices": 25,
+      "confidence": "medium"
+    },
+    "WiFi 3 (G)": {
+      "max_devices": 15,
+      "confidence": "low"
+    },
+    "Unknown": {
+      "max_devices": 30,
+      "confidence": "low"
+    }
   },
   "default_capacities": {
     "home_basic": 25,

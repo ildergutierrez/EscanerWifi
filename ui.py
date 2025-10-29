@@ -1,3 +1,4 @@
+
 import sys
 import os
 import subprocess
@@ -16,12 +17,34 @@ from main import scan_wifi
 from ai_suggestions import sugerencia_tecnologia, sugerencia_protocolo
 from network_status import get_connected_wifi_info, is_current_network, get_network_congestion, is_connected_to_network
 
+# Importar el módulo de velocidad
 try:
-    from vendor_lookup import get_vendor
+    from network_speed import test_network_speed
+except ImportError as e:
+    print(f"❌ No se pudo importar network_speed: {e}")
+    def test_network_speed():
+        return {
+            "success": False,
+            "error": "Módulo no disponible",
+            "download_mbps": 0.0,
+            "upload_mbps": 0.0,
+            "ping_ms": 999.0,
+            "message": "Speedtest no disponible"
+        }
+
+try:
+    from vendor_lookup import get_vendor, get_enhanced_vendor_info
 except Exception as e:
     print(f"Error cargando vendor_lookup: {e}")
     def get_vendor(_):
         return "Desconocido"
+    def get_enhanced_vendor_info(bssid, ssid=None):
+        return {
+            'vendor': "Desconocido",
+            'is_random': False,
+            'original_mac': bssid,
+            'original_vendor': "Desconocido"
+        }
 
 try:
     from ap_device_scanner import get_connected_devices, get_devices_count
@@ -44,6 +67,35 @@ except ImportError:
             "wifi_standard": "Desconocido",
             "confidence": "low"
         }
+
+# ==================== NUEVO WORKER PARA VELOCIDAD ====================
+class SpeedTestWorker(QThread):
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+    
+    def __init__(self):
+        super().__init__()
+        self._is_running = True
+        
+    def run(self):
+        if not self._is_running:
+            return
+        try:
+            result = test_network_speed()
+            if self._is_running:
+                self.finished.emit(result)
+        except Exception as e:
+            if self._is_running:
+                self.error.emit(str(e))
+    
+    def stop(self):
+        """Detener el worker de manera segura"""
+        self._is_running = False
+        if self.isRunning():
+            self.quit()
+            if not self.wait(3000):  # Esperar 3 segundos (speedtest puede ser lento)
+                self.terminate()
+                self.wait(1000)
 
 class SuggestionWindow(QDialog):
     def __init__(self, titulo: str, texto: str, parent=None):
@@ -117,6 +169,7 @@ COLOR_SUCCESS = "#107C10"     # Verde éxito
 COLOR_WARNING = "#D83B01"     # Naranja advertencia
 COLOR_ERROR = "#E81123"       # Rojo error
 COLOR_MUTED = "#848484"       # Texto secundario
+COLOR_NoCONETCT = "#79A3A1"
 
 # Colores para estados de señal
 def signal_color_by_dbm(signal_dbm: Optional[float]) -> str:
@@ -201,9 +254,10 @@ class VendorWorker(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     
-    def __init__(self, bssid):
+    def __init__(self, bssid, ssid=None):
         super().__init__()
         self.bssid = bssid
+        self.ssid = ssid
         self._is_running = True
         
     def run(self):
@@ -216,7 +270,9 @@ class VendorWorker(QThread):
             if not self._is_running:
                 return
                 
-            vendor = get_vendor(self.bssid)
+            # Usar la función mejorada que detecta MACs aleatorias
+            vendor_info = get_enhanced_vendor_info(self.bssid, self.ssid)
+            vendor = vendor_info['vendor']
             
             if self._is_running:
                 self.finished.emit(vendor)
@@ -303,49 +359,47 @@ class Card(QFrame):
         super().__init__(parent)
         self.red = red
         self.setFixedSize(CARD_WIDTH, CARD_HEIGHT)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLOR_CARD};
-                border-radius: 8px;
-                border: 1px solid {COLOR_CARD_BORDER};
-                position: relative;
-            }}
-            QLabel {{
-                color: {COLOR_TEXT};
-                background-color: transparent;
-            }}
-        """)
+        
+        # Verificar si es la red conectada y aplicar estilo
+        self._apply_connection_style()
+        
         self._build_ui()
-        # Verificar si es la red conectada
-        self._check_current_network()
         # Cargar información del router en segundo plano
         self._load_router_info()
 
-    def _check_current_network(self):
-        """Verificar si esta es la red actualmente conectada"""
+    def _apply_connection_style(self):
+        """Aplicar estilo de borde según si está conectado o no"""
         ssid = self.red.get("SSID")
         bssid = self.red.get("BSSID")
         
         if ssid and is_current_network(ssid, bssid):
-            # Agregar punto verde indicador
-            self._add_connected_indicator()
-
-    def _add_connected_indicator(self):
-        """Agregar punto verde indicador de conexión actual"""
-        indicator = QLabel("●", self)
-        indicator.setStyleSheet(f"""
-            QLabel {{
-                color: {COLOR_SUCCESS};
-                font-size: 16px;
-                background-color: transparent;
-                font-weight: bold;
-            }}
-        """)
-        indicator.setGeometry(10, 10, 20, 20)
-        indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Tooltip
-        indicator.setToolTip("Conectado a esta red")
+            # Borde VERDE para red conectada
+            self.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLOR_CARD};
+                    border-radius: 8px;
+                    border: 3px solid {COLOR_SUCCESS};
+                    position: relative;
+                }}
+                QLabel {{
+                    color: {COLOR_TEXT};
+                    background-color: transparent;
+                }}
+            """)
+        else:
+            # Borde ROJO para otras redes
+            self.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLOR_CARD};
+                    border-radius: 8px;
+                    border: 2px solid {COLOR_NoCONETCT};
+                    position: relative;
+                }}
+                QLabel {{
+                    color: {COLOR_TEXT};
+                    background-color: transparent;
+                }}
+            """)
 
     def _load_router_info(self):
         """Cargar información del router en segundo plano"""
@@ -474,7 +528,7 @@ class Card(QFrame):
         else:
             super().mousePressEvent(event)
 
-# ----------------- Diálogo de Dispositivos CON NUEVA LÓGICA -----------------
+# ----------------- Diálogo de Dispositivos CON MEDICIÓN DE VELOCIDAD -----------------
 class DevicesDialog(QDialog):
     def __init__(self, red_meta: dict, parent=None):
         super().__init__(parent)
@@ -487,6 +541,15 @@ class DevicesDialog(QDialog):
         # Workers
         self.capacity_worker = None
         self.scan_worker = None
+        self.speed_worker = None
+        
+        # Datos de velocidad
+        self.speed_data = {
+            "download_mbps": 0.0,
+            "upload_mbps": 0.0,
+            "ping_ms": 0.0,
+            "success": False
+        }
         
         # Establecer icono
         self.set_icon()
@@ -581,6 +644,71 @@ class DevicesDialog(QDialog):
         connection_status_lbl.setFont(QFont("Segoe UI", 11))
         capacity_layout.addWidget(connection_status_lbl)
         
+        # ============ NUEVA SECCIÓN: VELOCIDAD DE INTERNET ============
+        speed_frame = QFrame()
+        speed_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {COLOR_CARD};
+                border-radius: 6px;
+                border: 1px solid {COLOR_ACCENT};
+                padding: 10px;
+            }}
+        """)
+        speed_layout = QHBoxLayout()
+        speed_layout.setContentsMargins(10, 5, 10, 5)
+        speed_frame.setLayout(speed_layout)
+        
+        # Título velocidad
+        speed_title = QLabel("🌐 Velocidad de Internet")
+        speed_title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        speed_title.setStyleSheet(f"color: {COLOR_ACCENT};")
+        speed_layout.addWidget(speed_title)
+        
+        # Velocidad de bajada
+        self.download_lbl = QLabel("⬇️ --.- Mbps")
+        self.download_lbl.setFont(QFont("Segoe UI", 10))
+        self.download_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        speed_layout.addWidget(self.download_lbl)
+        
+        # Velocidad de subida
+        self.upload_lbl = QLabel("⬆️ --.- Mbps")
+        self.upload_lbl.setFont(QFont("Segoe UI", 10))
+        self.upload_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        speed_layout.addWidget(self.upload_lbl)
+        
+        # Ping
+        self.ping_lbl = QLabel("🏓 --- ms")
+        self.ping_lbl.setFont(QFont("Segoe UI", 10))
+        self.ping_lbl.setStyleSheet(f"color: {COLOR_MUTED};")
+        speed_layout.addWidget(self.ping_lbl)
+        
+        speed_layout.addStretch()
+        
+        # Botón para medir velocidad
+        self.speed_btn = QPushButton("📊 Medir Velocidad")
+        self.speed_btn.setFont(QFont("Segoe UI", 9))
+        self.speed_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLOR_SUCCESS};
+                color: white;
+                border-radius: 4px;
+                border: none;
+                padding: 6px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #0E6C0E;
+            }}
+            QPushButton:disabled {{
+                background-color: #505050;
+                color: #A0A0A0;
+            }}
+        """)
+        self.speed_btn.clicked.connect(self._start_speed_test)
+        speed_layout.addWidget(self.speed_btn)
+        
+        capacity_layout.addWidget(speed_frame)
+        
         # Información de dispositivos conectados
         devices_info_layout = QHBoxLayout()
         
@@ -652,6 +780,9 @@ class DevicesDialog(QDialog):
             
         layout.addWidget(self.devices_frame)
 
+        # Botones inferiores
+        buttons_layout = QHBoxLayout()
+        
         # Botón cerrar
         btn_close = QPushButton("Cerrar")
         btn_close.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
@@ -669,10 +800,65 @@ class DevicesDialog(QDialog):
             }}
         """)
         btn_close.clicked.connect(self.close)
-        layout.addWidget(btn_close)
+        buttons_layout.addWidget(btn_close)
+        
+        layout.addLayout(buttons_layout)
 
         # Guardar el estado actual para uso posterior si es necesario
         self.is_currently_connected = is_currently_connected
+
+    def _start_speed_test(self):
+        """Iniciar test de velocidad"""
+        if self.speed_worker and self.speed_worker.isRunning():
+            return
+            
+        self.speed_btn.setEnabled(False)
+        self.speed_btn.setText("⏳ Midendo...")
+        self.download_lbl.setText("Descarga ⬇:  ...")
+        self.upload_lbl.setText("Subiida ⬆:  ...")
+        self.ping_lbl.setText("ping/Latencia 🏓 ...")
+        
+        self.speed_worker = SpeedTestWorker()
+        self.speed_worker.finished.connect(self._on_speed_test_finished)
+        self.speed_worker.error.connect(self._on_speed_test_error)
+        self.speed_worker.start()
+
+    def _on_speed_test_finished(self, result):
+        """Callback cuando termina el test de velocidad"""
+        self.speed_data = result
+        
+        if result.get('success', False):
+            download = result.get('download_mbps', 0)
+            upload = result.get('upload_mbps', 0)
+            ping = result.get('ping_ms', 0)
+            
+            # Determinar colores según la calidad
+            download_color = COLOR_SUCCESS if download > 10 else COLOR_WARNING if download > 5 else COLOR_ERROR
+            upload_color = COLOR_SUCCESS if upload > 5 else COLOR_WARNING if upload > 2 else COLOR_ERROR
+            ping_color = COLOR_SUCCESS if ping < 50 else COLOR_WARNING if ping < 100 else COLOR_ERROR
+            
+            self.download_lbl.setText(f"⬇️ <span style='color: {download_color};'>{download:.1f}</span> Mbps")
+            self.upload_lbl.setText(f"⬆️ <span style='color: {upload_color};'>{upload:.1f}</span> Mbps")
+            self.ping_lbl.setText(f"🏓 <span style='color: {ping_color};'>{ping:.1f}</span> ms")
+        else:
+            self.download_lbl.setText("⬇️ Error")
+            self.upload_lbl.setText("⬆️ Error")
+            self.ping_lbl.setText("🏓 Error")
+        
+        self.speed_btn.setEnabled(True)
+        self.speed_btn.setText("📊 Medir Velocidad")
+        self.speed_worker = None
+
+    def _on_speed_test_error(self, error_msg):
+        """Callback cuando hay error en el test de velocidad"""
+        print(f"Error en test de velocidad: {error_msg}")
+        self.download_lbl.setText("⬇️ Error")
+        self.upload_lbl.setText("⬆️ Error")
+        self.ping_lbl.setText("🏓 Error")
+        
+        self.speed_btn.setEnabled(True)
+        self.speed_btn.setText("📊 Medir Velocidad")
+        self.speed_worker = None
 
     def _add_congestion_info(self, layout):
         """Agregar información de congestión de red"""
@@ -803,66 +989,69 @@ class DevicesDialog(QDialog):
         
         # Actualizar contadores
         self.devices_count_lbl.setText(f"📱 Conectados: 0/{self.router_capacity} dispositivos")
-        self.usage_lbl.setText("📈 Uso: 0%")
+        self.usage_lbl.setText("📈 rendimiento Conexión: 0%")
         
         self.scroll_layout.addStretch()
     
     def _on_scan_finished(self, result):
         """Callback cuando termina el escaneo de dispositivos"""
+
+        # 🔍 DEPURACIÓN: Ver el JSON recibido del escáner en tiempo real
+        import json
+        print("=== DEBUG: JSON RECIBIDO DE ESCÁNER ===")
+        try:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        except Exception as e:
+            print(f"[DEBUG] No se pudo mostrar JSON completo: {e}")
+        print("========================================")
+
         # Limpiar layout
         for i in reversed(range(self.scroll_layout.count())):
             item = self.scroll_layout.itemAt(i)
             if item.widget():
                 item.widget().setParent(None)
-        
-        if result['success']:
-            # Usar la capacidad del router detectada
-            self.current_devices = result['total_devices']
+
+        # === CASO 1: ÉXITO (success: True) ===
+        if result.get('success', False):
+            self.current_devices = result.get('total_devices', 0)
             max_devices = self.router_capacity
-            
-            # ACTUALIZAR INFORMACIÓN DE DISPOSITIVOS CONECTADOS
-            devices_text = f"📱 Conectados: {self.current_devices}/{max_devices} dispositivos"
-            self.devices_count_lbl.setText(devices_text)
-            
-            # Calcular porcentaje de uso
-            usage_percentage = min(100, int((self.current_devices / max_devices) * 100)) if max_devices > 0 else 0
-            
-            # Actualizar información de uso con color
-            usage_color = COLOR_SUCCESS if usage_percentage < 60 else COLOR_WARNING if usage_percentage < 85 else COLOR_ERROR
-            usage_text = f"📈 Uso: <span style='color: {usage_color};'>{usage_percentage}%</span>"
-            self.usage_lbl.setText(usage_text)
-            
-            # Mostrar dispositivos si el escaneo se realizó
-            if result.get('scan_performed', False) and result['devices']:
+
+            # Actualizar contadores
+            self.devices_count_lbl.setText(f"Conectados: {self.current_devices}/{max_devices} dispositivos")
+            usage = min(100, int((self.current_devices / max_devices) * 100)) if max_devices > 0 else 0
+            usage_color = COLOR_SUCCESS if usage < 60 else COLOR_WARNING if usage < 85 else COLOR_ERROR
+            self.usage_lbl.setText(f"Uso: <span style='color: {usage_color};'>{usage}%</span>")
+
+            # Mostrar dispositivos si hay
+            if result.get('scan_performed', False) and result.get('devices'):
                 for device in result['devices']:
-                    device_card = self._create_device_card(device)
-                    self.scroll_layout.addWidget(device_card)
+                    self.scroll_layout.addWidget(self._create_device_card(device))
             elif result.get('scan_performed', False):
-                # Escaneo realizado pero no se encontraron dispositivos
-                no_devices = QLabel("❌ No se encontraron dispositivos en la red")
-                no_devices.setFont(QFont("Segoe UI", 11))
-                no_devices.setStyleSheet(f"color: {COLOR_MUTED}; padding: 30px;")
-                no_devices.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.scroll_layout.addWidget(no_devices)
+                no_dev = QLabel("No se encontraron dispositivos en la red")
+                no_dev.setStyleSheet(f"color: {COLOR_MUTED}; padding: 30px;")
+                no_dev.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.scroll_layout.addWidget(no_dev)
             else:
-                # Escaneo no realizado (no debería ocurrir si está conectado)
-                error_msg = QLabel("⚠️ No se pudo realizar el escaneo de dispositivos")
-                error_msg.setFont(QFont("Segoe UI", 11))
-                error_msg.setStyleSheet(f"color: {COLOR_WARNING}; padding: 30px;")
-                error_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.scroll_layout.addWidget(error_msg)
+                # No conectado → mensaje amigable
+                msg = result.get('message', 'No se pudo escanear')
+                warning = QLabel(f"{msg}")
+                warning.setStyleSheet(f"color: {COLOR_WARNING}; padding: 30px;")
+                warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.scroll_layout.addWidget(warning)
+
+        # === CASO 2: FALLO (success: False) ===
         else:
-            error_text = f"❌ Error: {result['error']}"
-            self.router_info_lbl.setText(error_text)
-            
-            error_msg = QLabel("No se pudo escanear la red. Verifica tu conexión.")
-            error_msg.setFont(QFont("Segoe UI", 11))
-            error_msg.setStyleSheet(f"color: {COLOR_ERROR}; padding: 30px;")
-            error_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.scroll_layout.addWidget(error_msg)
-        
+            # Solo buscar 'error' si success es False
+            error_msg = result.get('error', 'Error desconocido en el escáner')
+            self.router_info_lbl.setText(f"Error: {error_msg}")
+
+            err_lbl = QLabel("No se pudo escanear la red. Verifica tu conexión.")
+            err_lbl.setStyleSheet(f"color: {COLOR_ERROR}; padding: 30px;")
+            err_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.scroll_layout.addWidget(err_lbl)
+
         self.scroll_layout.addStretch()
-    
+
     def _create_device_card(self, device: Dict) -> QFrame:
         """Crea una tarjeta para mostrar información del dispositivo"""
         card = QFrame()
@@ -918,7 +1107,12 @@ class DevicesDialog(QDialog):
         if self.scan_worker and self.scan_worker.isRunning():
             self.scan_worker.stop()
         
+        if self.speed_worker and self.speed_worker.isRunning():
+            self.speed_worker.stop()
+        
         event.accept()
+
+# ... (El resto del código permanece igual, incluyendo NetworkDetailsDialog y MainWindow)
 
 # ----------------- Diálogo de Detalles Profesional -----------------
 class NetworkDetailsDialog(QDialog):
@@ -933,8 +1127,10 @@ class NetworkDetailsDialog(QDialog):
         self.vendor_completed = False
         self._is_closing = False  # Bandera para controlar cierre
         
-        # Verificar si la MAC es aleatoria
-        self.mac_aleatoria = self._es_mac_aleatoria()
+        # Información de MAC aleatoria
+        self.mac_aleatoria = False
+        self.mac_original = bssid
+        self.esta_conectado_a_red = False
         
         # Establecer icono
         self.set_icon()
@@ -949,24 +1145,6 @@ class NetworkDetailsDialog(QDialog):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
         
-    def _es_mac_aleatoria(self):
-        """Determinar si la MAC es aleatoria basándose en los datos de la red"""
-        fabricante = self.red_meta.get("Fabricante", "").lower()
-        bssid = self.bssid.lower()
-        
-        # Verificar por fabricante
-        if "aleatoria" in fabricante or "random" in fabricante:
-            return True
-            
-        # Verificar por segundo carácter de la MAC (bit de local/universal)
-        if len(bssid) >= 2:
-            segundo_caracter = bssid.split('-')[0][1] if '-' in bssid else bssid[1]
-            # Si el segundo bit es 2, 3, 6, 7, A, B, E, F -> es local (potencialmente aleatoria)
-            if segundo_caracter in ['2', '3', '6', '7', 'a', 'b', 'e', 'f']:
-                return True
-                
-        return False
-
     def setup_ui(self):
         # Estilo profesional corporativo
         self.setStyleSheet(f"""
@@ -1114,7 +1292,7 @@ class NetworkDetailsDialog(QDialog):
             }}
         """)
 
-        # Botón de ver dispositivos (SOLO si la MAC NO es aleatoria)
+        # Botón de ver dispositivos (inicialmente deshabilitado)
         self.btn_devices = QPushButton("📱 Ver Dispositivos Conectados")
         self.btn_devices.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self.btn_devices.setMinimumHeight(45)
@@ -1141,23 +1319,32 @@ class NetworkDetailsDialog(QDialog):
 
         buttons_layout.addWidget(self.btn_tecn)
         buttons_layout.addWidget(self.btn_proto)
-        
-        # Solo añadir el botón de dispositivos si la MAC NO es aleatoria
-        if not self.mac_aleatoria:
-            buttons_layout.addWidget(self.btn_devices)
-            self.btn_devices.clicked.connect(self._show_devices)
-        else:
-            # Opcional: mostrar un mensaje o tooltip indicando por qué no está disponible
-            self.btn_devices.setVisible(False)
-
-        outer_layout.addWidget(buttons_frame)
+        buttons_layout.addWidget(self.btn_devices)
 
         # Conectar señales
         self.btn_tecn.clicked.connect(lambda: self._handle_sugerencia("tecnologia"))
         self.btn_proto.clicked.connect(lambda: self._handle_sugerencia("protocolo"))
+        self.btn_devices.clicked.connect(self._show_devices)
 
+        outer_layout.addWidget(buttons_frame)
+
+        # Verificar si está conectado a esta red
+        self._check_connection_status()
+        
         # Iniciar búsqueda de fabricante
         self._start_vendor_lookup()
+
+    def _check_connection_status(self):
+        """Verificar si está conectado a esta red específica"""
+        ssid = self.red_meta.get("SSID")
+        bssid = self.red_meta.get("BSSID")
+        
+        self.esta_conectado_a_red = is_connected_to_network(ssid, bssid)
+        
+        # Si no está conectado, desactivar el botón de dispositivos inmediatamente
+        if not self.esta_conectado_a_red:
+            self.btn_devices.setEnabled(False)
+            self.btn_devices.setText("🔒 Conéctate a la red")
 
     def _update_buttons_state(self):
         """Actualizar estado de los botones"""
@@ -1167,29 +1354,32 @@ class NetworkDetailsDialog(QDialog):
         self.btn_tecn.setEnabled(vendor_ready and not has_active_suggestions)
         self.btn_proto.setEnabled(vendor_ready and not has_active_suggestions)
         
-        # Solo actualizar el botón de dispositivos si existe y la MAC no es aleatoria
-        if not self.mac_aleatoria and hasattr(self, 'btn_devices'):
-            self.btn_devices.setEnabled(vendor_ready)
+        # SOLO activar el botón de dispositivos si está conectado a la red
+        if self.esta_conectado_a_red:
+            self.btn_devices.setEnabled(vendor_ready and not has_active_suggestions)
+        else:
+            self.btn_devices.setEnabled(False)
+            self.btn_devices.setText("🔒 Conéctate a la red")
 
         if not vendor_ready:
             self.btn_tecn.setText("⏳ Esperando fabricante...")
             self.btn_proto.setText("⏳ Esperando fabricante...")
-            if not self.mac_aleatoria and hasattr(self, 'btn_devices'):
+            if self.esta_conectado_a_red:
                 self.btn_devices.setText("⏳ Esperando fabricante...")
         elif has_active_suggestions:
             self.btn_tecn.setText("🔄 Analizando...")
             self.btn_proto.setText("🔄 Analizando...")
-            if not self.mac_aleatoria and hasattr(self, 'btn_devices'):
+            if self.esta_conectado_a_red:
                 self.btn_devices.setText("📱 Ver Dispositivos Conectados")
         else:
             self.btn_tecn.setText("🔍 Análisis de Tecnología")
             self.btn_proto.setText("🔒 Análisis de Protocolo")
-            if not self.mac_aleatoria and hasattr(self, 'btn_devices'):
+            if self.esta_conectado_a_red:
                 self.btn_devices.setText("📱 Ver Dispositivos Conectados")
 
     def _start_vendor_lookup(self):
-        """Iniciar búsqueda de fabricante"""
-        self.vendor_worker = VendorWorker(self.bssid)
+        """Iniciar búsqueda de fabricante con detección de MAC aleatoria"""
+        self.vendor_worker = VendorWorker(self.bssid, self.red_meta.get("SSID"))
         self.vendor_worker.finished.connect(self._on_vendor_finished)
         self.vendor_worker.error.connect(lambda e: print(f"Error vendor: {e}"))
         self.vendor_worker.finished.connect(self.vendor_worker.deleteLater)
@@ -1200,6 +1390,22 @@ class NetworkDetailsDialog(QDialog):
         """Callback cuando termina la búsqueda de fabricante"""
         if not self._is_closing:
             self.vendor_lbl.setText(vendor)
+            
+            # SOLO verificar MAC aleatoria si está conectado a la red
+            if self.esta_conectado_a_red:
+                # Obtener información completa para detectar MAC aleatoria
+                enhanced_info = get_enhanced_vendor_info(self.bssid, self.red_meta.get("SSID"))
+                
+                # Actualizar estado de MAC aleatoria
+                self.mac_aleatoria = enhanced_info.get('is_random', False)
+                self.mac_original = enhanced_info.get('original_mac', self.bssid)
+                
+                # Si es MAC aleatoria y tenemos fabricante original, actualizar display
+                if self.mac_aleatoria and enhanced_info.get('original_vendor') and enhanced_info['original_vendor'] != "Desconocido":
+                    self.vendor_lbl.setText(f"{enhanced_info['original_vendor']} (MAC Original)")
+                    # Actualizar también en red_meta para pasarlo al diálogo de dispositivos
+                    self.red_meta["Fabricante"] = enhanced_info['original_vendor']
+            
             self.vendor_completed = True
             self.vendor_worker = None
             self._update_buttons_state()
@@ -1239,7 +1445,14 @@ class NetworkDetailsDialog(QDialog):
         # Asegurarse de que tenemos la información del fabricante
         if hasattr(self, 'vendor_lbl'):
             fabricante = self.vendor_lbl.text()
+            # Remover el texto "(MAC Original)" si está presente
+            if " (MAC Original)" in fabricante:
+                fabricante = fabricante.replace(" (MAC Original)", "")
             self.red_meta["Fabricante"] = fabricante
+        
+        # Pasar la MAC original si es una MAC aleatoria y estamos conectados
+        if self.esta_conectado_a_red and self.mac_aleatoria and self.mac_original:
+            self.red_meta["BSSID_Original"] = self.mac_original
         
         dialog = DevicesDialog(self.red_meta, self)
         dialog.exec()
@@ -1290,21 +1503,42 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # Título principal
+        # Título principal CON ICONO
+        title_widget = QWidget()
+        title_layout = QHBoxLayout(title_widget)
+        title_layout.setContentsMargins(20, 20, 20, 20)
+        title_layout.setSpacing(15)
+        
+        # Cargar y mostrar el icono
+        icon_path = os.path.join(os.path.dirname(__file__), "wifi.png")
+        if os.path.exists(icon_path):
+            icon_label = QLabel()
+            icon_pixmap = QIcon(icon_path).pixmap(60, 60)  # Mismo tamaño que la fuente
+            icon_label.setPixmap(icon_pixmap)
+            title_layout.addWidget(icon_label)
+        
         title = QLabel("Escáner WiFi Corporativo")
         title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
         title.setStyleSheet(f"""
             QLabel {{
                 color: #FFFFFF;
-                padding: 20px;
-                background-color: {COLOR_CARD};
-                border-radius: 8px;
-                border-bottom: 4px solid {COLOR_ACCENT};
+                background-color: transparent;
             }}
         """)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(title)
+        title_layout.addWidget(title)
+        # title_layout.addStretch()
+        # Centrar el contenido (icono + texto)
+        title_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLOR_CARD};
+                border-radius: 8px;
+            }}
+        """)
+        
+        main_layout.addWidget(title_widget)
 
+        # ... el resto del código permanece igual ...
         # Contador de redes
         self.cantidad_label = QLabel("Redes detectadas: 0")
         self.cantidad_label.setFont(QFont("Segoe UI", 12))

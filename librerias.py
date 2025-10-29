@@ -31,7 +31,8 @@ REQUIRED_LIBRARIES = {
     "scapy": "scapy",
     "requests": "requests",
     "psutil": "psutil",
-    "mac_vendor_lookup": "mac-vendor-lookup"
+    "mac_vendor_lookup": "mac-vendor-lookup",
+    "speedtest-cli":"speedtest-cli"
 }
 
 def verificar_librerias():

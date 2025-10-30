@@ -491,21 +491,21 @@ def get_devices_count(red_info: Dict = None) -> int:
 # ----------------------------------------------------------------------
 # Limpieza de cache
 # ----------------------------------------------------------------------
-def cleanup_old_cache():
-    now = datetime.now()
-    to_del = [mac for mac, ts in device_cache.items()
-              if now - ts > timedelta(seconds=CACHE_DURATION)]
-    for mac in to_del:
-        del device_cache[mac]
+# def cleanup_old_cache():
+#     now = datetime.now()
+#     to_del = [mac for mac, ts in device_cache.items()
+#             if now - ts > timedelta(seconds=CACHE_DURATION)]
+#     for mac in to_del:
+#         del device_cache[mac]
 
-def start_cache_cleaner():
-    def cleaner():
-        while True:
-            time.sleep(60)
-            cleanup_old_cache()
-    threading.Thread(target=cleaner, daemon=True).start()
+# def start_cache_cleaner():
+#     def cleaner():
+#         while True:
+#             time.sleep(60)
+#             cleanup_old_cache()
+#     threading.Thread(target=cleaner, daemon=True).start()
 
-start_cache_cleaner()
+# start_cache_cleaner()
 
 if __name__ == "__main__":
     network_info = get_current_network_info()

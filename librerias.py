@@ -32,7 +32,18 @@ REQUIRED_LIBRARIES = {
     "requests": "requests",
     "psutil": "psutil",
     "mac_vendor_lookup": "mac-vendor-lookup",
-    "speedtest-cli":"speedtest-cli"
+    "pywifi":"pywifi",
+    "ifaddr":"ifaddr",
+    "urllib3": "urllib3",
+    "certifi": "certifi",
+    "chardet": "chardet",
+    "idna": "idna",
+    "colorama": "colorama",
+    "setuptools": "setuptools",
+    "wheel": "wheel",
+    "future": "future",
+    "speedtest-cli":"speedtest-cli",
+    "qt-material": "qt-material"
 }
 
 def verificar_librerias():

@@ -1,3 +1,4 @@
+from librerias import verificar_librerias
 import sys
 import os
 import subprocess
@@ -11,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QCursor
 from PyQt6.QtGui import QMouseEvent
-from librerias import verificar_librerias
+
 from main import scan_wifi
 from ai_suggestions import sugerencia_tecnologia, sugerencia_protocolo
 from network_status import get_connected_wifi_info, is_current_network, get_network_congestion, is_connected_to_network
@@ -46,13 +47,15 @@ except Exception as e:
         }
 
 try:
-    from ap_device_scanner import get_connected_devices, get_devices_count
+    from ap_device_scanner import get_connected_devices, get_devices_count, get_current_network_info
 except Exception as e:
     print(f"Error cargando ap_device_scanner: {e}")
     def get_connected_devices(red_info=None):
         return {'success': False, 'devices': [], 'total_devices': 0, 'max_devices': 50, 'usage_percentage': 0}
     def get_devices_count(red_info=None):
         return 0
+    def get_current_network_info():
+        return None
 
 # Importar el detector de capacidad
 try:
@@ -550,6 +553,14 @@ class DevicesDialog(QDialog):
             "success": False
         }
         
+        # Datos de calidad de red
+        self.network_quality = {
+            "stability": 0.0,
+            "packet_loss": 0.0,
+            "latency": 0.0,
+            "signal_quality": 0.0
+        }
+        
         # Establecer icono
         self.set_icon()
         
@@ -561,8 +572,13 @@ class DevicesDialog(QDialog):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self._auto_refresh_devices)
         self.refresh_timer.start(120000)  # 2 minutos
-
+         # ✅ DIAGNÓSTICO INMEDIATO
+        print("🚀 INICIANDO DevicesDialog DIAGNÓSTICO")
+        diagnosticar_red_actual()
+        # ✅ PRIMERO verificar conexión (esto actualizará red_meta si es necesario)
         self._check_network_connection()
+        
+        # LUEGO cargar capacidad del router
         self._load_router_capacity()
         
     def set_icon(self):
@@ -616,9 +632,48 @@ class DevicesDialog(QDialog):
         capacity_layout.addWidget(self.router_info_lbl)
         
         # Estado de conexión
-        connection_status_lbl = QLabel()
-        connection_status_lbl.setFont(QFont("Segoe UI", 11))
-        capacity_layout.addWidget(connection_status_lbl)
+        self.connection_status_lbl = QLabel()
+        self.connection_status_lbl.setFont(QFont("Segoe UI", 11))
+        capacity_layout.addWidget(self.connection_status_lbl)
+        
+        # ============ SECCIÓN COMPACTA: CALIDAD DE RED ============
+        quality_frame = QFrame()
+        quality_layout = QHBoxLayout()
+        quality_layout.setContentsMargins(10, 5, 10, 5)
+        quality_frame.setLayout(quality_layout)
+        
+        # Título calidad de red
+        quality_title = QLabel("📊 Calidad:")
+        quality_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        quality_title.setStyleSheet(f"color: {COLOR_ACCENT}; min-width: 60px;")
+        quality_layout.addWidget(quality_title)
+        
+        # Estabilidad
+        self.stability_lbl = QLabel("🔄 --%")
+        self.stability_lbl.setFont(QFont("Segoe UI", 9))
+        self.stability_lbl.setToolTip("Estabilidad de la red")
+        quality_layout.addWidget(self.stability_lbl)
+        
+        # Pérdida de paquetes
+        self.packet_loss_lbl = QLabel("📦 --%")
+        self.packet_loss_lbl.setFont(QFont("Segoe UI", 9))
+        self.packet_loss_lbl.setToolTip("Pérdida de paquetes")
+        quality_layout.addWidget(self.packet_loss_lbl)
+        
+        # Latencia
+        self.latency_lbl = QLabel("🏓 -- ms")
+        self.latency_lbl.setFont(QFont("Segoe UI", 9))
+        self.latency_lbl.setToolTip("Latencia/Ping")
+        quality_layout.addWidget(self.latency_lbl)
+        
+        # Calidad de señal
+        self.signal_quality_lbl = QLabel("📡 --%")
+        self.signal_quality_lbl.setFont(QFont("Segoe UI", 9))
+        self.signal_quality_lbl.setToolTip("Calidad de señal")
+        quality_layout.addWidget(self.signal_quality_lbl)
+        
+        quality_layout.addStretch()
+        capacity_layout.addWidget(quality_frame)
         
         # Sección de velocidad
         speed_frame = QFrame()
@@ -626,26 +681,28 @@ class DevicesDialog(QDialog):
         speed_layout.setContentsMargins(10, 5, 10, 5)
         speed_frame.setLayout(speed_layout)
         
-        speed_title = QLabel("🌐 Velocidad de Internet")
-        speed_title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        speed_title = QLabel("🌐 Velocidad:")
+        speed_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        speed_title.setStyleSheet(f"color: {COLOR_ACCENT}; min-width: 60px;")
         speed_layout.addWidget(speed_title)
         
         self.download_lbl = QLabel("⬇ --.- Mbps")
-        self.download_lbl.setFont(QFont("Segoe UI", 10))
+        self.download_lbl.setFont(QFont("Segoe UI", 9))
         speed_layout.addWidget(self.download_lbl)
         
         self.upload_lbl = QLabel("⬆ --.- Mbps")
-        self.upload_lbl.setFont(QFont("Segoe UI", 10))
+        self.upload_lbl.setFont(QFont("Segoe UI", 9))
         speed_layout.addWidget(self.upload_lbl)
         
-        self.ping_lbl = QLabel("Ping 🏓 --- ms")
-        self.ping_lbl.setFont(QFont("Segoe UI", 10))
+        self.ping_lbl = QLabel("Ping 🏓 -- ms")
+        self.ping_lbl.setFont(QFont("Segoe UI", 9))
         speed_layout.addWidget(self.ping_lbl)
         
         speed_layout.addStretch()
         
-        self.speed_btn = QPushButton("📊 Medir Velocidad")
+        self.speed_btn = QPushButton("📊 Medir")
         self.speed_btn.setFont(QFont("Segoe UI", 9))
+        self.speed_btn.setFixedWidth(80)
         self.speed_btn.clicked.connect(self._start_speed_test)
         speed_layout.addWidget(self.speed_btn)
         
@@ -708,13 +765,105 @@ class DevicesDialog(QDialog):
     def _auto_refresh_devices(self):
         """Actualizar automáticamente la lista de dispositivos"""
         if self.is_connected_to_network:
+            self._update_network_quality()
             self._start_devices_scan()
 
     def _check_network_connection(self):
-        """Verificar si está conectado a esta red"""
-        ssid = self.red_meta.get("SSID")
-        bssid = self.red_meta.get("BSSID")
-        self.is_connected_to_network = is_connected_to_network(ssid, bssid)
+        """Verificar si está conectado a esta red usando información REAL"""
+        # Obtener información REAL de la red actualmente conectada
+        current_network = get_current_network_info()
+        
+        # ✅ DIAGNÓSTICO COMPLETO
+        print(f"🔍 DIAGNÓSTICO COMPLETO:")
+        print(f"   - current_network: {current_network}")
+        print(f"   - red_meta (objetivo): {self.red_meta.get('SSID')}")
+        
+        if not current_network:
+            print("   ❌ get_current_network_info() devolvió None o vacío")
+            self.is_connected_to_network = False
+            self.connection_status_lbl.setText("🔴 No conectado a ninguna red - Escaneo limitado")
+            self.connection_status_lbl.setStyleSheet(f"color: {COLOR_WARNING}; font-weight: bold;")
+            return
+        
+        # ✅ CORRECCIÓN: Usar claves en minúsculas (como viene de get_current_network_info)
+        target_ssid = self.red_meta.get("SSID")
+        # current_network usa 'ssid' en minúscula, no 'SSID'
+        current_ssid = current_network.get("ssid") or current_network.get("SSID")  # Intentar ambas
+        
+        # Solo comparar por SSID (el BSSID puede cambiar)
+        self.is_connected_to_network = (current_ssid == target_ssid)
+        
+        # ✅ DEBUG: Mostrar información para diagnosticar
+        print(f"   - Red objetivo: '{target_ssid}'")
+        print(f"   - Red actual: '{current_ssid}'")
+        print(f"   - ¿Coinciden?: {self.is_connected_to_network}")
+        print(f"   - Claves disponibles en current_network: {list(current_network.keys())}")
+        
+        # ✅ ACTUALIZAR red_meta con información REAL si estamos conectados
+        if self.is_connected_to_network:
+            # Mantener los datos específicos de escaneo pero actualizar con info real
+            # Convertir claves a mayúsculas para consistencia
+            current_network_upper = {}
+            for key, value in current_network.items():
+                current_network_upper[key.upper()] = value
+            
+            self.red_meta.update(current_network_upper)
+            
+            self.connection_status_lbl.setText("🟢 Conectado a esta red - Escaneo activo")
+            self.connection_status_lbl.setStyleSheet(f"color: {COLOR_SUCCESS}; font-weight: bold;")
+            # Obtener métricas de calidad de red
+            self._update_network_quality()
+        else:
+            # Verificar si estamos en una red diferente
+            if current_ssid:
+                self.connection_status_lbl.setText(f"🔶 Conectado a otra red ('{current_ssid}') - Escaneo limitado")
+            else:
+                self.connection_status_lbl.setText("🔴 No conectado a esta red - Escaneo limitado")
+            self.connection_status_lbl.setStyleSheet(f"color: {COLOR_WARNING}; font-weight: bold;") 
+
+    def _update_network_quality(self):
+        """Actualizar métricas de calidad de red desde network_status"""
+        if self.is_connected_to_network:
+            try:
+                # Obtener información de congestión/calidad de red
+                congestion_info = get_network_congestion()
+                
+                if congestion_info:
+                    # Actualizar datos locales
+                    self.network_quality = {
+                        "stability": congestion_info.get('stability_percentage', 0.0),
+                        "packet_loss": congestion_info.get('packet_loss', 0.0),
+                        "latency": congestion_info.get('latency', 0.0),
+                        "signal_quality": congestion_info.get('signal_quality', 0.0)
+                    }
+                    
+                    # Actualizar UI con colores según la calidad
+                    self._update_quality_ui()
+                    
+            except Exception as e:
+                print(f"Error obteniendo calidad de red: {e}")
+
+    def _update_quality_ui(self):
+        """Actualizar la UI con las métricas de calidad"""
+        # Estabilidad
+        stability = self.network_quality["stability"]
+        stability_color = COLOR_SUCCESS if stability >= 80 else COLOR_WARNING if stability >= 60 else COLOR_ERROR
+        self.stability_lbl.setText(f"<span style='color: {stability_color};'>🔄 {stability:.1f}%</span>")
+        
+        # Pérdida de paquetes
+        packet_loss = self.network_quality["packet_loss"]
+        packet_loss_color = COLOR_SUCCESS if packet_loss <= 5 else COLOR_WARNING if packet_loss <= 15 else COLOR_ERROR
+        self.packet_loss_lbl.setText(f"<span style='color: {packet_loss_color};'>📦 {packet_loss:.1f}%</span>")
+        
+        # Latencia
+        latency = self.network_quality["latency"]
+        latency_color = COLOR_SUCCESS if latency <= 50 else COLOR_WARNING if latency <= 100 else COLOR_ERROR
+        self.latency_lbl.setText(f"<span style='color: {latency_color};'>🏓 {latency:.1f}ms</span>")
+        
+        # Calidad de señal
+        signal_quality = self.network_quality["signal_quality"]
+        signal_color = COLOR_SUCCESS if signal_quality >= 80 else COLOR_WARNING if signal_quality >= 60 else COLOR_ERROR
+        self.signal_quality_lbl.setText(f"<span style='color: {signal_color};'>📡 {signal_quality:.1f}%</span>")
 
     def _start_speed_test(self):
         """Iniciar test de velocidad"""
@@ -722,7 +871,7 @@ class DevicesDialog(QDialog):
             return
             
         self.speed_btn.setEnabled(False)
-        self.speed_btn.setText("⏳ Midendo...")
+        self.speed_btn.setText("⏳...")
         
         self.speed_worker = SpeedTestWorker()
         self.speed_worker.finished.connect(self._on_speed_test_finished)
@@ -738,20 +887,20 @@ class DevicesDialog(QDialog):
             upload = result.get('upload_mbps', 0)
             ping = result.get('ping_ms', 0)
             
-            self.download_lbl.setText(f"⬇ {download:.1f} Mbps")
-            self.upload_lbl.setText(f"⬆ {upload:.1f} Mbps")
-            self.ping_lbl.setText(f"Ping 🏓 {ping:.1f} ms")
+            self.download_lbl.setText(f"⬇ {download:.1f}Mbps")
+            self.upload_lbl.setText(f"⬆ {upload:.1f}Mbps")
+            self.ping_lbl.setText(f"🏓 {ping:.1f}ms")
         
         self.speed_btn.setEnabled(True)
-        self.speed_btn.setText("📊 Medir Velocidad")
+        self.speed_btn.setText("📊 Medir")
 
     def _on_speed_test_error(self, error_msg):
         """Callback cuando hay error en el test de velocidad"""
         self.download_lbl.setText("⬇ Error")
         self.upload_lbl.setText("⬆ Error")
-        self.ping_lbl.setText("Ping 🏓 Error")
+        self.ping_lbl.setText("🏓 Error")
         self.speed_btn.setEnabled(True)
-        self.speed_btn.setText("📊 Medir Velocidad")
+        self.speed_btn.setText("📊 Medir")
 
     def _load_router_capacity(self):
         """Cargar información de capacidad del router"""
@@ -783,6 +932,9 @@ class DevicesDialog(QDialog):
     
     def _handle_scan_logic(self):
         """Manejar la lógica de escaneo basada en el estado de conexión"""
+        # ✅ PRIMERO verificar y actualizar la conexión
+        self._check_network_connection()
+        
         if self.is_connected_to_network:
             self._start_devices_scan()
         else:
@@ -819,15 +971,15 @@ class DevicesDialog(QDialog):
             item = self.scroll_layout.itemAt(i)
             if item.widget():
                 item.widget().setParent(None)
-
+                print("respuestas:",result)
         if result.get('success', False):
+            print("respuestas.get:",result)
             devices = result.get('devices', [])
             total_devices = len(devices)
             max_devices = result.get('max_devices') or self.router_capacity or 50
 
             self.current_devices = total_devices
             self.devices_count_lbl.setText(f"Conectados: {total_devices}/{max_devices} dispositivos")
-
             usage = min(100, int((total_devices / max_devices) * 100)) if max_devices > 0 else 0
             self.usage_lbl.setText(f"📈 Uso: {usage}%")
 
@@ -895,7 +1047,6 @@ class DevicesDialog(QDialog):
         if self.speed_worker and self.speed_worker.isRunning():
             self.speed_worker.stop()
         event.accept()
-# ... (El resto del código permanece igual, incluyendo NetworkDetailsDialog y MainWindow)
 
 # ----------------- Diálogo de Detalles Profesional -----------------
 class NetworkDetailsDialog(QDialog):
@@ -1207,7 +1358,6 @@ class NetworkDetailsDialog(QDialog):
             self.vendor_worker = None
             self._update_buttons_state()
             
-
     def _handle_sugerencia(self, tipo):
         """Manejar solicitud de sugerencia"""
         if not self.vendor_completed or self._is_closing:
@@ -1618,6 +1768,27 @@ def main():
     app.aboutToQuit.connect(handle_application_quit)
     
     sys.exit(app.exec())
+# Función temporal de diagnóstico
+def diagnosticar_red_actual():
+    """Diagnóstico de la función get_current_network_info"""
+    print("🛠️ DIAGNÓSTICO get_current_network_info():")
+    
+    # Probar la función actual
+    resultado = get_current_network_info()
+    print(f"   - Resultado: {resultado}")
+    
+    # Probar alternativas
+    try:
+        from network_status import get_connected_wifi_info
+        resultado2 = get_connected_wifi_info()
+        print(f"   - get_connected_wifi_info(): {resultado2}")
+    except Exception as e:
+        print(f"   - Error get_connected_wifi_info: {e}")
+    
+    return resultado
 
+# Llamar al diagnóstico cuando se abra DevicesDialog
+# Agrega esta línea en el constructor de DevicesDialog, después de super().__init__(parent)
+# diagnosticar_red_actual()
 if __name__ == "__main__":
     main()

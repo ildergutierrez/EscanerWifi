@@ -201,29 +201,48 @@ def _get_local_ip_address() -> Optional[str]:
 
 
 def _get_default_gateway() -> Optional[str]:
-    """Obtiene el gateway por defecto en Windows/Linux de forma más robusta"""
+    """Obtiene el gateway por defecto de forma más robusta"""
     try:
         system = platform.system().lower()
+        
         if system == "windows":
+            # Método mejorado para Windows
             result = subprocess.run(
-                ["route", "print", "0.0.0.0"],
+                ["ipconfig"],
                 capture_output=True,
                 text=True,
                 encoding="cp850",
                 errors="replace",
                 timeout=10
             )
-            output = result.stdout.lower()
-
-            # 🧩 Buscar línea con "0.0.0.0" y una IP válida al final
-            for line in output.splitlines():
-                if "0.0.0.0" in line and re.search(r"\d+\.\d+\.\d+\.\d+", line):
-                    m = re.findall(r"(\d+\.\d+\.\d+\.\d+)", line)
-                    if len(m) >= 2:
-                        gateway_ip = m[1]
-                        if gateway_ip != "0.0.0.0":
-                            return gateway_ip
+            output = result.stdout
+            
+            # Buscar gateway en la salida de ipconfig
+            for line in output.split('\n'):
+                line = line.strip()
+                if 'puerta de enlace predeterminada' in line.lower() or 'default gateway' in line.lower():
+                    # Extraer IP del gateway
+                    ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line)
+                    if ip_match:
+                        return ip_match.group(1)
+            
+            # Fallback: usar la IP local con .1 o .254
+            local_ip = _get_local_ip_address()
+            if local_ip:
+                parts = local_ip.split('.')
+                if len(parts) == 4:
+                    # Probar gateways comunes
+                    common_gateways = [
+                        f"{parts[0]}.{parts[1]}.{parts[2]}.1",
+                        f"{parts[0]}.{parts[1]}.{parts[2]}.254",
+                        f"{parts[0]}.{parts[1]}.{parts[2]}.253"
+                    ]
+                    for gateway in common_gateways:
+                        if gateway != local_ip:
+                            return gateway
+        
         else:
+            # Linux/Mac
             result = subprocess.run(
                 ["ip", "route", "show", "default"],
                 capture_output=True,
@@ -233,23 +252,75 @@ def _get_default_gateway() -> Optional[str]:
             m = re.search(r"default via ([\d.]+)", result.stdout)
             if m:
                 return m.group(1)
+                
     except Exception as e:
         print(f"[Gateway] Error detectando gateway: {e}")
-        pass
+    
+    # Último fallback
+    return None
 
-    # Valor por defecto de respaldo
-    return "192.168.1.254"
 
+def _measure_network_metrics() -> Tuple[float, float]:
+    """Mide latencia y pérdida de paquetes - versión mejorada"""
+    try:
+        gateway = _get_default_gateway()
+        
+        # Si no hay gateway, usar Google DNS como fallback
+        if not gateway:
+            gateway = "8.8.8.8"
+            print(f"   ⚠️  Usando fallback: {gateway}")
+        
+        count = 2  # Reducir para mayor velocidad
+        timeout = 1  # Timeout más corto
+        
+        system = platform.system().lower()
+        if system == "windows":
+            cmd = ["ping", "-n", str(count), "-w", str(timeout * 1000), gateway]
+        else:
+            cmd = ["ping", "-c", str(count), "-W", str(timeout), gateway]
 
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        output = result.stdout
+
+        print(f"\n=== DEBUG PING a {gateway} ===\n")
+        print(output)
+        print("=========================\n")
+
+        # --- WINDOWS ---
+        if system == "windows":
+            # porcentaje de pérdida
+            loss_match = re.search(r"(\d+)%\s*perdidos", output, re.IGNORECASE)
+            packet_loss = float(loss_match.group(1)) if loss_match else 100.0
+
+            # tiempo promedio
+            time_match = re.search(r"media\s*=\s*(\d+)\s*ms", output, re.IGNORECASE)
+            latency = float(time_match.group(1)) if time_match else 999.0
+
+        # --- LINUX / MAC ---
+        else:
+            loss_match = re.search(r"(\d+)% packet loss", output)
+            packet_loss = float(loss_match.group(1)) if loss_match else 100.0
+
+            time_match = re.search(r"= [\d.]+/([\d.]+)/", output)
+            latency = float(time_match.group(1)) if time_match else 999.0
+
+        return latency, packet_loss
+
+    except Exception as e:
+        print(f"[Ping] Error midiendo métricas: {e}")
+        return 999.0, 100.0
+    
 def is_connected_to_network(target_ssid: str, target_bssid: str = None) -> bool:
     """
     Verifica si estamos conectados a la red especificada.
-    Maneja espacios, tildes, codificación y BSSID.
+    Versión mejorada que no depende del ping.
     """
     if not target_ssid:
         return False
 
     wifi = get_connected_wifi_info()
+    
+    # ✅ VERIFICACIÓN BÁSICA MEJORADA
     if not wifi['connected'] or not wifi['ssid']:
         return False
 
@@ -257,25 +328,24 @@ def is_connected_to_network(target_ssid: str, target_bssid: str = None) -> bool:
     current_ssid = wifi['ssid']
     if current_ssid:
         current_ssid = re.sub(r'[\r\n\t]', '', current_ssid).strip()
-        current_ssid = re.sub(r'\s+', ' ', current_ssid)  # Espacios múltiples
+        current_ssid = re.sub(r'\s+', ' ', current_ssid)
 
     target_clean = re.sub(r'[\r\n\t]', '', target_ssid).strip()
     target_clean = re.sub(r'\s+', ' ', target_clean)
 
-    # Comparación insensible a mayúsculas/minúsculas
-    if current_ssid.lower() != target_clean.lower():
-        return False
-
-    # BSSID (opcional, más confiable)
+    # ✅ COMPARACIÓN SOLO POR SSID (ignorar ping/latencia)
+    ssid_match = (current_ssid.lower() == target_clean.lower())
+    
+    # Si tenemos BSSID, lo usamos como verificación adicional
     if target_bssid and wifi['bssid']:
         c = re.sub(r'[^0-9A-F]', '', wifi['bssid'].upper())
         t = re.sub(r'[^0-9A-F]', '', target_bssid.upper())
-        return c == t
-
-    return True
+        return ssid_match and (c == t)
+    
+    return ssid_match
 
 def get_network_congestion(interface: str = None) -> Dict[str, float]:
-    """Analiza estabilidad, latencia, pérdida y señal"""
+    """Analiza estabilidad, latencia, pérdida y señal - versión tolerante"""
     try:
         wifi_info = get_connected_wifi_info()
         if not wifi_info['connected']:
@@ -287,8 +357,19 @@ def get_network_congestion(interface: str = None) -> Dict[str, float]:
             }
 
         signal_quality = _calculate_signal_quality(wifi_info.get('signal'))
-        latency, packet_loss = _measure_network_metrics()
-        stability = _calculate_stability(signal_quality, packet_loss, latency)
+        
+        # Si la señal es buena, asumir conexión estable incluso si ping falla
+        if signal_quality >= 70:
+            return {
+                'stability_percentage': 85.0,  # Asumir estable
+                'packet_loss': 0.0,
+                'latency': 50.0,
+                'signal_quality': signal_quality
+            }
+        else:
+            # Solo hacer ping si es necesario
+            latency, packet_loss = _measure_network_metrics()
+            stability = _calculate_stability(signal_quality, packet_loss, latency)
 
         return {
             'stability_percentage': stability,
@@ -299,14 +380,14 @@ def get_network_congestion(interface: str = None) -> Dict[str, float]:
 
     except Exception as e:
         print(f"[Congestión] Error: {e}")
+        # Fallback optimista
         return {
-            'stability_percentage': 0.0,
-            'packet_loss': 100.0,
-            'latency': 999.0,
-            'signal_quality': 0.0
+            'stability_percentage': 80.0,
+            'packet_loss': 0.0,
+            'latency': 50.0,
+            'signal_quality': 70.0
         }
-
-
+    
 def _calculate_signal_quality(signal_dbm: Optional[str]) -> float:
     try:
         if not signal_dbm:

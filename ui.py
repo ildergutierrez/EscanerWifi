@@ -794,11 +794,11 @@ class DevicesDialog(QDialog):
         # Solo comparar por SSID (el BSSID puede cambiar)
         self.is_connected_to_network = (current_ssid == target_ssid)
         
-        # ✅ DEBUG: Mostrar información para diagnosticar
-        print(f"   - Red objetivo: '{target_ssid}'")
-        print(f"   - Red actual: '{current_ssid}'")
-        print(f"   - ¿Coinciden?: {self.is_connected_to_network}")
-        print(f"   - Claves disponibles en current_network: {list(current_network.keys())}")
+        # # ✅ DEBUG: Mostrar información para diagnosticar
+        # print(f"   - Red objetivo: '{target_ssid}'")
+        # print(f"   - Red actual: '{current_ssid}'")
+        # print(f"   - ¿Coinciden?: {self.is_connected_to_network}")
+        # print(f"   - Claves disponibles en current_network: {list(current_network.keys())}")
         
         # ✅ ACTUALIZAR red_meta con información REAL si estamos conectados
         if self.is_connected_to_network:

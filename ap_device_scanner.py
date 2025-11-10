@@ -244,7 +244,7 @@ def _scan_windows_optimized(red_info: Dict = None) -> List[Dict]:
 
             if _is_valid_mac(local_mac):
                 devices.append(_create_device_info(local_ip, local_mac))
-                print(f"[DEBUG] Dispositivo local agregado manualmente: {local_ip} ({local_mac})")
+                # print(f"[DEBUG] Dispositivo local agregado manualmente: {local_ip} ({local_mac})")
 
         # ------------------------------------------------------------------
         # 🔧 AGREGAR ROUTER SI FALTA

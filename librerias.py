@@ -26,7 +26,7 @@ import subprocess
 import sys
 
 # Lista de librerías requeridas
-REQUIRED_LIBRARIES = {
+librerias = {
     "PyQt6": "PyQt6",
     "scapy": "scapy",
     "requests": "requests",
@@ -45,33 +45,58 @@ REQUIRED_LIBRARIES = {
     "speedtest-cli":"speedtest-cli",
     "qt-material": "qt-material"
 }
-def actualizar_pip():
-    """Actualiza pip a la última versión disponible"""
+
+def run_cmd(cmd):
+    """Ejecuta un comando del sistema mostrando salida."""
     try:
-        print("🔄 Verificando si pip necesita actualización...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-        print("✅ pip actualizado correctamente.")
-    except Exception as e:
-        print(f"❌ No se pudo actualizar pip. Error: {e}")
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error ejecutando: {cmd}\n{e}")
+
+
+def actualizar_pip():
+    """Actualiza pip y setuptools."""
+    print("⬆️  Actualizando pip y setuptools...")
+    run_cmd(f"{sys.executable} -m pip install --upgrade pip setuptools wheel")
+    print("✅ pip actualizado correctamente.\n")
+
+
+def desinstalar_todo():
+    """Desinstala todas las librerías listadas."""
+    print("🧹 Desinstalando librerías antiguas...\n")
+    for modulo, paquete in librerias.items():
+        nombre_pkg = paquete.split("==")[0]
+        run_cmd(f"{sys.executable} -m pip uninstall -y {nombre_pkg}")
+    print("\n✅ Desinstalación completa.\n")
+
+
+def instalar_todo():
+    """Reinstala todas las librerías requeridas."""
+    print("📦 Instalando librerías necesarias...\n")
+    for modulo, paquete in librerias.items():
+        print(f"🔸 Instalando {paquete} ...")
+        run_cmd(f"{sys.executable} -m pip install {paquete}")
+    print("\n✅ Instalación completada correctamente.\n")
+
+
+def actualizar_python():
+    """Intenta actualizar Python (solo muestra guía si requiere instalador)."""
+    print("🐍 Verificando versión de Python...\n")
+    run_cmd("python --version")
+    print("ℹ️  Para actualizar Python manualmente:")
+    print("👉  Visita: https://www.python.org/downloads/")
+    print("⚠️  La actualización automática desde pip no es segura.\n")
+
 
 def verificar_librerias():
-    # Actualizar pip primero, si es necesario
+    """Ejecuta ciclo completo: actualizar pip, desinstalar e instalar todo."""
+    print("🚀 Iniciando reinstalación completa del entorno CoffeeGrow...\n")
     actualizar_pip()
-    
-    for lib in REQUIRED_LIBRARIES:
-        try:
-            importlib.import_module(lib)
-            print(f"✔ La librería '{lib}' ya está instalada.")
-        except ImportError:
-            print(f"⚠ La librería '{lib}' no está instalada. Instalando...")
-            instalar_libreria(lib)
+    #desinstalar_todo()
+    instalar_todo()
+    actualizar_python()
+    print("🎉 Entorno CoffeeGrow actualizado y limpio.\n")
 
-def instalar_libreria(lib):
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
-        print(f"✅ Librería '{lib}' instalada correctamente.")
-    except Exception as e:
-        print(f"❌ No se pudo instalar la librería '{lib}'. Error: {e}")
 
 # Ejecutar verificación al inicio
 if __name__ == "__main__":

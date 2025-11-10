@@ -145,7 +145,7 @@ def parse_netsh_output_corrected(output):
     """
     redes = []
     
-    print("DEBUG - Iniciando parser mejorado")
+    # print("DEBUG - Iniciando parser mejorado")
     
     lines = output.split('\n')
     current_ssid = None
@@ -179,7 +179,7 @@ def parse_netsh_output_corrected(output):
             current_ssid = ssid_match.group(1).strip()
             ssid_auth = None
             ssid_cipher = None
-            print(f"DEBUG - SSID encontrado: '{current_ssid}'")
+            # print(f"DEBUG - SSID encontrado: '{current_ssid}'")
             i += 1
             continue
         
@@ -201,7 +201,7 @@ def parse_netsh_output_corrected(output):
             
             current_bssid = clean_bssid(bssid_match.group(1))
             current_data = {'bssid': current_bssid}
-            print(f"DEBUG - BSSID encontrado: {current_bssid}")
+            # print(f"DEBUG - BSSID encontrado: {current_bssid}")
             i += 1
             continue
         
@@ -210,14 +210,14 @@ def parse_netsh_output_corrected(output):
             auth_match = re.search(r':\s*(.+)', line)
             if auth_match:
                 ssid_auth = auth_match.group(1).strip()
-                print(f"DEBUG - Autenticación capturada: '{ssid_auth}'")
+                # print(f"DEBUG - Autenticación capturada: '{ssid_auth}'")
         
         # Capturar cifrado del SSID (está en el bloque del SSID)
         if current_ssid and ('cifrado' in line.lower() or 'encryption' in line.lower()):
             cipher_match = re.search(r':\s*(.+)', line)
             if cipher_match:
                 ssid_cipher = cipher_match.group(1).strip()
-                print(f"DEBUG - Cifrado capturado: '{ssid_cipher}'")
+                # print(f"DEBUG - Cifrado capturado: '{ssid_cipher}'")
         
         # Procesar información de señal y canal para la BSSID actual
         if current_bssid and current_ssid:
@@ -226,14 +226,14 @@ def parse_netsh_output_corrected(output):
                 sig_match = re.search(r'(\d+)%', line)
                 if sig_match:
                     current_data['signal'] = int(sig_match.group(1))
-                    print(f"DEBUG - Señal: {current_data['signal']}%")
+                    # print(f"DEBUG - Señal: {current_data['signal']}%")
             
             # Canal
             elif 'canal' in line.lower() or 'channel' in line.lower():
                 chan_match = re.search(r'(\d+)', line)
                 if chan_match:
                     current_data['channel'] = int(chan_match.group(1))
-                    print(f"DEBUG - Canal: {current_data['channel']}")
+                    # print(f"DEBUG - Canal: {current_data['channel']}")
         
         i += 1
     
@@ -250,7 +250,7 @@ def parse_netsh_output_corrected(output):
             current_data['cipher'] = akm_info["cipher"]
         redes.append(create_network_from_data(current_ssid, current_data))
     
-    print(f"DEBUG - Parser completado. {len(redes)} redes encontradas")
+    # print(f"DEBUG - Parser completado. {len(redes)} redes encontradas")
     return redes
 
 def create_network_from_data(ssid, data):
@@ -271,7 +271,7 @@ def create_network_from_data(ssid, data):
         # Detectar seguridad
         seguridad = parse_security_corrected(auth, cipher)
     
-    print(f"DEBUG create_network_from_data - auth: '{auth}', cipher: '{cipher}', seguridad: '{seguridad}'")
+    # print(f"DEBUG create_network_from_data - auth: '{auth}', cipher: '{cipher}', seguridad: '{seguridad}'")
     
     return {
         "SSID": ssid,
@@ -296,7 +296,7 @@ def parse_security_corrected(auth, cipher):
     auth_lower = auth_str.lower().strip()
     cipher_lower = cipher_str.lower().strip()
     
-    print(f"DEBUG parse_security - auth: '{auth_lower}', cipher: '{cipher_lower}'")
+    # print(f"DEBUG parse_security - auth: '{auth_lower}', cipher: '{cipher_lower}'")
     
     # Redes abiertas - patrones en español
     if any(x in auth_lower for x in ['abierta', 'open', 'libre']):

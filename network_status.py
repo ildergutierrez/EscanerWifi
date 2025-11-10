@@ -282,9 +282,9 @@ def _measure_network_metrics() -> Tuple[float, float]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         output = result.stdout
 
-        print(f"\n=== DEBUG PING a {gateway} ===\n")
-        print(output)
-        print("=========================\n")
+        # print(f"\n=== DEBUG PING a {gateway} ===\n")
+        # print(output)
+        # print("=========================\n")
 
         # --- WINDOWS ---
         if system == "windows":
@@ -423,9 +423,9 @@ def _measure_network_metrics() -> Tuple[float, float]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
         output = result.stdout
 
-        print("\n=== DEBUG SALIDA PING ===\n")
-        print(output)
-        print("=========================\n")
+        # print("\n=== DEBUG SALIDA PING ===\n")
+        # print(output)
+        # print("=========================\n")
 
         # --- WINDOWS ---
         if system == "windows":

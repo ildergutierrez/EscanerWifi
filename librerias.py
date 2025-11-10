@@ -45,8 +45,19 @@ REQUIRED_LIBRARIES = {
     "speedtest-cli":"speedtest-cli",
     "qt-material": "qt-material"
 }
+def actualizar_pip():
+    """Actualiza pip a la última versión disponible"""
+    try:
+        print("🔄 Verificando si pip necesita actualización...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+        print("✅ pip actualizado correctamente.")
+    except Exception as e:
+        print(f"❌ No se pudo actualizar pip. Error: {e}")
 
 def verificar_librerias():
+    # Actualizar pip primero, si es necesario
+    actualizar_pip()
+    
     for lib in REQUIRED_LIBRARIES:
         try:
             importlib.import_module(lib)

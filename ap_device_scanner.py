@@ -155,6 +155,7 @@ def _classify_device_type(mac: str) -> str:
         '00:1D:7E': 'TP-Link', '00:1E:1F': 'Google',
         '00:21:29': 'Cisco', '00:50:7F': 'Netgear',
         '14:F6:5A': 'Xiaomi', '28:EF:01': 'Google',
+        'A8:49:4D': 'Huawei',
     }
     oui = mac_upper[:8]
     if oui in oui_db:
@@ -491,21 +492,21 @@ def get_devices_count(red_info: Dict = None) -> int:
 # ----------------------------------------------------------------------
 # Limpieza de cache
 # ----------------------------------------------------------------------
-# def cleanup_old_cache():
-#     now = datetime.now()
-#     to_del = [mac for mac, ts in device_cache.items()
-#             if now - ts > timedelta(seconds=CACHE_DURATION)]
-#     for mac in to_del:
-#         del device_cache[mac]
+def cleanup_old_cache():
+    now = datetime.now()
+    to_del = [mac for mac, ts in device_cache.items()
+            if now - ts > timedelta(seconds=CACHE_DURATION)]
+    for mac in to_del:
+        del device_cache[mac]
 
-# def start_cache_cleaner():
-#     def cleaner():
-#         while True:
-#             time.sleep(60)
-#             cleanup_old_cache()
-#     threading.Thread(target=cleaner, daemon=True).start()
+def start_cache_cleaner():
+    def cleaner():
+        while True:
+            time.sleep(60)
+            cleanup_old_cache()
+    threading.Thread(target=cleaner, daemon=True).start()
 
-# start_cache_cleaner()
+start_cache_cleaner()
 
 if __name__ == "__main__":
     network_info = get_current_network_info()

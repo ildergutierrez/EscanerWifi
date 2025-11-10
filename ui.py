@@ -1,4 +1,5 @@
 from librerias import verificar_librerias
+verificar_librerias()
 import sys
 import os
 import subprocess
@@ -1742,7 +1743,7 @@ class MainWindow(QMainWindow):
 
 # ----------------- Main -----------------
 def main():
-    verificar_librerias()
+ 
     app = QApplication(sys.argv)
     
     # Establecer estilo de aplicación

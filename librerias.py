@@ -90,12 +90,12 @@ def actualizar_python():
 
 def verificar_librerias():
     """Ejecuta ciclo completo: actualizar pip, desinstalar e instalar todo."""
-    print("🚀 Iniciando reinstalación completa del entorno CoffeeGrow...\n")
+    print("🚀 Iniciando reinstalación completa del entorno Escaner WI-FI 802.11...\n")
     actualizar_pip()
     #desinstalar_todo()
     instalar_todo()
     actualizar_python()
-    print("🎉 Entorno CoffeeGrow actualizado y limpio.\n")
+    print("🎉 Entorno Escaner WI-FI 802.11 actualizado y limpio.\n")
 
 
 # Ejecutar verificación al inicio

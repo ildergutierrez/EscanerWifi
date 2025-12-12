@@ -2,6 +2,7 @@
 Consulta universal de fabricantes a partir del BSSID (OUI).
 Sistema mejorado con múltiples fuentes y detección precisa de cualquier marca.
 Incluye detección de MACs aleatorias y recuperación de MAC original.
+Versión adaptada para Linux.
 """
 
 from os import system
@@ -15,7 +16,14 @@ import platform
 import socket
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Tuple
-system('cls')
+
+# Limpiar pantalla según sistema operativo
+system_name = platform.system().lower()
+if system_name == 'windows':
+    system('cls')
+else:
+    system('clear')  # Linux/macOS usa clear
+
 # Importar el detector de MACs con manejo de errores mejorado
 try:
     from mac_detector import detect_original_mac
@@ -39,11 +47,15 @@ except ImportError as e:
 class MACDetector:
     def __init__(self):
         self.original_mac_cache = {}
+        self.system = platform.system().lower()
+        self.is_linux = self.system == "linux"
+        self.is_windows = self.system == "windows"
     
     def detect_original_mac(self, target_ssid: str, target_bssid: str = None) -> Dict[str, Optional[str]]:
         """
         Detecta la MAC original del router cuando se usa MAC aleatoria.
         MODIFICADO: Usa mac_detector.py si está disponible
+        VERSIÓN LINUX: Adaptada para comandos de Linux
         """
         try:
             # Si mac_detector está disponible, usarlo
@@ -67,7 +79,7 @@ class MACDetector:
             return self._fallback_detection(target_ssid, target_bssid)
 
     def _fallback_detection(self, target_ssid: str, target_bssid: str = None) -> Dict[str, Optional[str]]:
-        """Método de fallback usando detección local"""
+        """Método de fallback usando detección local - VERSIÓN LINUX"""
         try:
             from network_status import get_connected_wifi_info
             
@@ -143,8 +155,6 @@ class MACDetector:
                 'error': f'Error en detección: {str(e)}'
             }
     
-    # En la misma clase VendorLookup, mejora el método _is_random_mac
-
     def _is_random_mac(self, mac: str) -> bool:
         """Verifica si una MAC es aleatoria de manera más precisa."""
         try:
@@ -257,11 +267,11 @@ class MACDetector:
             return "Desconocido"
     
     def _find_original_mac(self, ssid: str, current_mac: str) -> Optional[str]:
-        """Busca la MAC original usando múltiples métodos."""
+        """Busca la MAC original usando múltiples métodos - VERSIÓN LINUX."""
         methods = [
-            self._scan_arp_table,
-            self._check_gateway_mac,
-            self._scan_wifi_networks,
+            self._scan_arp_table_linux,
+            self._check_gateway_mac_linux,
+            self._scan_wifi_networks_linux,
         ]
         
         for method in methods:
@@ -269,112 +279,235 @@ class MACDetector:
                 result = method(ssid, current_mac)
                 if result and self._validate_mac_candidate(result, current_mac):
                     return result
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Error en método {method.__name__}: {e}")
                 continue
         
         return None
     
-    def _scan_arp_table(self, ssid: str, current_mac: str) -> Optional[str]:
-        """Escanea la tabla ARP para encontrar dispositivos en la red."""
+    def _scan_arp_table_linux(self, ssid: str, current_mac: str) -> Optional[str]:
+        """Escanea la tabla ARP para encontrar dispositivos en la red - LINUX."""
         try:
-            system = platform.system().lower()
+            print(f"🔍 [Linux ARP] Escaneando tabla ARP...")
             
-            if system == "windows":
-                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
+            # Método 1: ip neighbor (moderno)
+            try:
+                result = subprocess.run(['ip', 'neighbor', 'show'], 
+                                      capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
                     for line in lines:
-                        match = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+([0-9A-Fa-f-]{17})', line)
-                        if match:
-                            ip = match.group(1)
-                            mac = match.group(2).replace('-', ':').upper()
+                        parts = line.split()
+                        if len(parts) >= 5:
+                            ip = parts[0]
+                            mac = parts[4].upper()
+                            state = parts[5] if len(parts) > 5 else ''
+                            
+                            if (mac != current_mac and 
+                                not self._is_random_mac(mac) and
+                                state in ['REACHABLE', 'STALE', 'DELAY']):
+                                # Verificar si es gateway común
+                                if ip.endswith('.1') or ip.endswith('.254'):
+                                    print(f"🔍 [Linux ARP] Gateway encontrado: {mac} (IP: {ip})")
+                                    return mac
+            except:
+                pass
+            
+            # Método 2: arp -a (tradicional)
+            result = subprocess.run(['arp', '-a'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    # Formato Linux: ? (192.168.1.1) at 00:11:22:33:44:55 [ether] on wlan0
+                    ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+                    mac_match = re.search(r'at\s+([0-9a-fA-F:]{17})', line)
+                    
+                    if ip_match and mac_match:
+                        ip = ip_match.group(1)
+                        mac = mac_match.group(1).upper()
+                        
+                        if mac != current_mac and not self._is_random_mac(mac):
+                            if ip.endswith('.1') or ip.endswith('.254'):
+                                print(f"🔍 [Linux ARP] Gateway en arp -a: {mac}")
+                                return mac
+            
+            # Método 3: arp -n (numérico)
+            try:
+                result = subprocess.run(['arp', '-n'], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    # Saltar encabezado
+                    for line in lines[1:]:
+                        if not line.strip():
+                            continue
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            ip = parts[0]
+                            mac = parts[2].upper()
                             
                             if mac != current_mac and not self._is_random_mac(mac):
                                 if ip.endswith('.1') or ip.endswith('.254'):
+                                    print(f"🔍 [Linux ARP] Gateway en arp -n: {mac}")
                                     return mac
-            else:
-                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
-                if result.returncode == 0:
-                    lines = result.stdout.split('\n')
-                    for line in lines:
-                        match = re.search(r'at\s+([0-9A-Fa-f:]{17})', line)
-                        if match:
-                            mac = match.group(1).upper()
-                            if mac != current_mac and not self._is_random_mac(mac):
+            except:
+                pass
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error en _scan_arp_table_linux: {e}")
+            return None
+    
+    def _check_gateway_mac_linux(self, ssid: str, current_mac: str) -> Optional[str]:
+        """Obtiene la MAC del gateway por defecto - LINUX."""
+        try:
+            # Obtener gateway primero
+            gateway_ip = self._get_gateway_ip_linux()
+            if not gateway_ip:
+                print("❌ [Linux Gateway] No se pudo obtener IP del gateway")
+                return None
+            
+            print(f"🔍 [Linux Gateway] Gateway IP: {gateway_ip}")
+            
+            # Hacer ping al gateway para actualizar cache ARP
+            try:
+                subprocess.run(['ping', '-c', '1', '-W', '1', gateway_ip], 
+                             capture_output=True, timeout=2)
+            except:
+                pass
+            
+            # Obtener MAC del gateway
+            result = subprocess.run(['arp', '-n', gateway_ip], 
+                                  capture_output=True, text=True, timeout=3)
+            
+            if result.returncode == 0:
+                output = result.stdout
+                # Buscar MAC en diferentes formatos
+                patterns = [
+                    r'([0-9A-Fa-f][0-9A-Fa-f][:-]){5}([0-9A-Fa-f][0-9A-Fa-f])',
+                    r'at\s+([0-9a-fA-F:]{17})',
+                    r'([0-9A-Fa-f-]{17})'
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, output)
+                    if match:
+                        mac = match.group(0).replace('-', ':').upper()
+                        if mac != current_mac and not self._is_random_mac(mac):
+                            if re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', mac):
+                                print(f"🔍 [Linux Gateway] MAC encontrada: {mac}")
                                 return mac
             
             return None
             
-        except Exception:
+        except Exception as e:
+            print(f"❌ Error en _check_gateway_mac_linux: {e}")
             return None
     
-    def _check_gateway_mac(self, ssid: str, current_mac: str) -> Optional[str]:
-        """Obtiene la MAC del gateway por defecto."""
+    def _get_gateway_ip_linux(self) -> Optional[str]:
+        """Obtiene la IP del gateway en Linux."""
         try:
+            # Método 1: ip route (moderno)
+            result = subprocess.run(['ip', 'route', 'show', 'default'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                match = re.search(r'default via ([\d\.]+)', result.stdout)
+                if match:
+                    return match.group(1)
+            
+            # Método 2: netstat (tradicional)
+            result = subprocess.run(['netstat', '-rn'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    if line.startswith('0.0.0.0') or line.startswith('default'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            return parts[1]
+            
+            # Método 3: route (antiguo)
+            result = subprocess.run(['route', '-n'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    if line.startswith('0.0.0.0'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            return parts[1]
+            
+            # Fallback: usar la IP local con .1
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.connect(("8.8.8.8", 80))
                 local_ip = s.getsockname()[0]
-                gateway_ip = '.'.join(local_ip.split('.')[:-1]) + '.1'
-            
-            system = platform.system().lower()
-            if system == "windows":
-                result = subprocess.run(['arp', '-a', gateway_ip], capture_output=True, text=True)
-            else:
-                result = subprocess.run(['arp', '-a', gateway_ip], capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                output = result.stdout
-                mac_match = re.search(r'([0-9A-Fa-f][0-9A-Fa-f][:-]){5}([0-9A-Fa-f][0-9A-Fa-f])', output)
-                if mac_match:
-                    mac = mac_match.group(0).replace('-', ':').upper()
-                    if mac != current_mac and not self._is_random_mac(mac):
-                        return mac
+                parts = local_ip.split('.')
+                if len(parts) == 4:
+                    return f"{parts[0]}.{parts[1]}.{parts[2]}.1"
             
             return None
             
-        except Exception:
+        except Exception as e:
+            print(f"❌ Error obteniendo gateway IP: {e}")
             return None
     
-    def _scan_wifi_networks(self, ssid: str, current_mac: str) -> Optional[str]:
-        """Escanea redes WiFi cercanas para encontrar el mismo SSID con diferente BSSID."""
+    def _scan_wifi_networks_linux(self, ssid: str, current_mac: str) -> Optional[str]:
+        """Escanea redes WiFi cercanas para encontrar el mismo SSID con diferente BSSID - LINUX."""
         try:
-            system = platform.system().lower()
             target_ssid_clean = ssid.strip().lower()
             
-            if system == "windows":
-                result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'], 
-                                      capture_output=True, text=True, encoding='utf-8', errors='ignore')
-                if result.returncode == 0:
-                    output = result.stdout
-                    pattern = rf'SSID \d+ : {re.escape(target_ssid_clean)}.*?BSSID \d+ : ([0-9A-Fa-f:]+)'
-                    matches = re.findall(pattern, output, re.IGNORECASE | re.DOTALL)
-                    
-                    for mac in matches:
-                        mac_clean = mac.upper()
-                        if (mac_clean != current_mac and 
-                            not self._is_random_mac(mac_clean) and
-                            self._is_likely_router_mac(mac_clean)):
-                            return mac_clean
-            
-            elif system == "linux":
-                result = subprocess.run(['nmcli', '-t', '-f', 'SSID,BSSID,SIGNAL', 'dev', 'wifi'], 
-                                      capture_output=True, text=True)
+            # Método 1: nmcli (NetworkManager)
+            try:
+                result = subprocess.run(['nmcli', '-t', '-f', 'SSID,BSSID,SIGNAL', 'device', 'wifi', 'list'], 
+                                      capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines:
                         parts = line.split(':')
                         if len(parts) >= 3:
                             line_ssid = parts[0]
-                            mac = parts[1].upper()
+                            bssid_raw = parts[1]
+                            # Manejar formato con \: en nmcli
+                            bssid = bssid_raw.replace('\\:', ':').upper()
                             
                             if (line_ssid.lower() == target_ssid_clean and 
-                                mac != current_mac and 
-                                not self._is_random_mac(mac)):
-                                return mac
+                                bssid != current_mac and 
+                                not self._is_random_mac(bssid)):
+                                print(f"🔍 [Linux WiFi] Encontrada con nmcli: {bssid}")
+                                return bssid
+            except Exception as e:
+                print(f"⚠️  nmcli no disponible: {e}")
+            
+            # Método 2: iwlist (requiere root)
+            try:
+                # Obtener interfaz WiFi
+                result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        if 'Interface' in line:
+                            iface = line.split()[-1]
+                            result = subprocess.run(['sudo', 'iwlist', iface, 'scan'], 
+                                                  capture_output=True, text=True, timeout=10)
+                            if result.returncode == 0:
+                                output = result.stdout
+                                
+                                # Buscar SSID y BSSID
+                                lines = output.split('\n')
+                                current_bssid = None
+                                
+                                for line in lines:
+                                    if 'Address:' in line:
+                                        current_bssid = line.split(':')[1].strip().upper()
+                                    elif 'ESSID:' in line and current_bssid:
+                                        line_ssid = line.split(':')[1].strip().strip('"')
+                                        if (line_ssid.lower() == target_ssid_clean and 
+                                            current_bssid != current_mac and 
+                                            not self._is_random_mac(current_bssid)):
+                                            print(f"🔍 [Linux WiFi] Encontrada con iwlist: {current_bssid}")
+                                            return current_bssid
+            except Exception as e:
+                print(f"⚠️  iwlist no disponible: {e}")
             
             return None
             
-        except Exception:
+        except Exception as e:
+            print(f"❌ Error en _scan_wifi_networks_linux: {e}")
             return None
     
     def _estimate_original_mac(self, ssid: str) -> Optional[str]:
@@ -758,130 +891,6 @@ class VendorLookup:
         except:
             pass
         return "Desconocido"
-    
-    # En vendor_lookup.py - modifica la función get_enhanced_vendor_info
-# En vendor_lookup.py - REEMPLAZA las funciones relacionadas con MAC aleatoria
-
-def get_enhanced_vendor_info(bssid: str, ssid: str = None) -> Dict[str, Optional[str]]:
-    """
-    Obtiene información completa del fabricante incluyendo detección de MACs aleatorias.
-    """
-    try:
-        lookup = _get_vendor_lookup()
-        print(f"🔍 [VendorLookup] Iniciando enhanced info para: {bssid}, SSID: {ssid}")
-        
-        # Paso 1: Obtener vendor básico
-        basic_vendor = lookup.lookup(bssid)
-        print(f"🔍 [VendorLookup] Vendor básico: {basic_vendor}")
-        
-        # Paso 2: Verificar si es MAC aleatoria
-        is_random = lookup._is_random_mac(bssid)
-        print(f"🔍 [VendorLookup] ¿Es MAC aleatoria? {is_random}")
-        
-        # Si no es aleatoria o no tenemos SSID, retornar info básica
-        if not is_random or not ssid:
-            can_scan = basic_vendor != "Desconocido" and basic_vendor != "MAC Aleatoria"
-            return {
-                'mac': bssid,
-                'vendor': basic_vendor,
-                'is_random': False,
-                'original_mac': bssid,
-                'original_vendor': basic_vendor,
-                'can_scan_devices': can_scan,
-                'confidence': 'alto'
-            }
-        
-        # Paso 3: Si es MAC aleatoria y tenemos SSID, usar mac_detector
-        print(f"🔍 [VendorLookup] Detectada MAC aleatoria, buscando MAC original...")
-        detection_result = lookup.mac_detector.detect_original_mac(ssid, bssid)
-        print(f"🔍 [VendorLookup] Resultado detección: {detection_result}")
-        
-        # Paso 4: Procesar el resultado de la detección
-        if detection_result.get('original_mac') and detection_result['original_mac'] != bssid:
-            original_mac = detection_result['original_mac']
-            print(f"🔍 [VendorLookup] MAC original encontrada: {original_mac}")
-            
-            # Hacer lookup del vendor para la MAC original
-            original_vendor = lookup.lookup(original_mac)
-            print(f"🔍 [VendorLookup] Vendor original: {original_vendor}")
-            
-            # Determinar si podemos escanear dispositivos
-            can_scan = original_vendor != "Desconocido" and original_vendor != "MAC Aleatoria"
-            
-            return {
-                'mac': bssid,
-                'vendor': f"{original_vendor} (MAC Original)" if original_vendor != "Desconocido" else "MAC Aleatoria",
-                'is_random': True,
-                'original_mac': original_mac,
-                'original_vendor': original_vendor,
-                'can_scan_devices': can_scan,
-                'confidence': detection_result.get('confidence', 'alto'),
-                'note': detection_result.get('note', 'MAC original detectada')
-            }
-        else:
-            # No se pudo detectar MAC original
-            print(f"🔍 [VendorLookup] No se pudo detectar MAC original")
-            return {
-                'mac': bssid,
-                'vendor': basic_vendor,
-                'is_random': True,
-                'original_mac': bssid,
-                'original_vendor': basic_vendor,
-                'can_scan_devices': False,
-                'confidence': detection_result.get('confidence', 'bajo'),
-                'note': detection_result.get('note', 'No se pudo detectar MAC original')
-            }
-            
-    except Exception as e:
-        print(f"❌ [VendorLookup] Error en get_enhanced_vendor_info: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        return {
-            'mac': bssid,
-            'vendor': get_vendor(bssid),
-            'is_random': False,
-            'original_mac': bssid,
-            'original_vendor': get_vendor(bssid),
-            'can_scan_devices': False,
-            'confidence': 'bajo',
-            'error': str(e)
-        }
-
-# También mejora el método _is_random_mac en la clase VendorLookup
-def _is_random_mac(self, mac: str) -> bool:
-    """Verifica si una MAC es aleatoria de manera más precisa."""
-    try:
-        if not mac:
-            return False
-            
-        mac_clean = mac.upper().replace('-', ':').replace('.', ':')
-        parts = mac_clean.split(':')
-        
-        if len(parts) < 3:
-            return False
-        
-        # Primer octeto en hexadecimal
-        first_octet = int(parts[0], 16)
-        
-        # Bit 1 (segundo bit menos significativo) = 1 indica MAC local/aleatoria
-        is_local = (first_octet & 0b00000010) != 0
-        
-        # Patrones comunes de MACs aleatorias
-        random_indicators = [
-            mac_clean.startswith('02:'),
-            mac_clean.startswith('06:'), 
-            mac_clean.startswith('0A:'),
-            mac_clean.startswith('0E:'),
-            is_local
-        ]
-        
-        result = any(random_indicators)
-        return result
-        
-    except Exception as e:
-        print(f"❌ Error en _is_random_mac: {e}")
-        return False
 
 # Instancia global singleton
 _vendor_lookup = None
@@ -1030,9 +1039,9 @@ def get_database_info() -> dict:
         return {"error": f"No disponible: {e}"}
 
 # Pruebas del módulo
-# En la parte final de vendor_lookup.py (donde están las pruebas)
 if __name__ == "__main__":
     print("🚀 Inicializando vendor_lookup con detección de MACs aleatorias...")
+    print(f"📊 Sistema: {platform.system()} {platform.release()}")
     _get_vendor_lookup()
     
     # Modo interactivo para probar MACs específicas

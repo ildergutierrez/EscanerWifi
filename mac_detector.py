@@ -1,6 +1,7 @@
 """
 Detector de MAC original para redes WiFi.
 Identifica la MAC real del router cuando se usan MACs aleatorias.
+Versión compatible con Windows y Linux.
 """
 
 import subprocess
@@ -13,6 +14,10 @@ from network_status import get_connected_wifi_info, is_connected_to_network
 class MACDetector:
     def __init__(self):
         self.original_mac_cache = {}
+        self.system = platform.system().lower()
+        self.is_linux = self.system == "linux"
+        self.is_windows = self.system == "windows"
+        self.is_macos = self.system == "darwin"
     
     def detect_original_mac(self, target_ssid: str, target_bssid: str = None) -> Dict[str, Optional[str]]:
         """
@@ -21,6 +26,7 @@ class MACDetector:
         """
         try:
             print(f"🔍 [MACDetector] Iniciando detección para SSID: {target_ssid}")
+            print(f"🔍 [MACDetector] Sistema: {self.system}")
             
             # Verificar que estamos conectados a la red específica
             if not is_connected_to_network(target_ssid, target_bssid):
@@ -158,10 +164,11 @@ class MACDetector:
     def _scan_arp_table(self, ssid: str, current_mac: str) -> Optional[str]:
         """Escanea la tabla ARP para encontrar dispositivos en la red."""
         try:
-            system = platform.system().lower()
+            print(f"🔍 [MACDetector] Escaneando tabla ARP ({self.system})...")
             
-            if system == "windows":
-                result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
+            if self.is_windows:
+                result = subprocess.run(['arp', '-a'], capture_output=True, text=True, 
+                                       encoding='cp850', errors='replace')
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
                     for line in lines:
@@ -176,17 +183,51 @@ class MACDetector:
                                 if ip.endswith('.1') or ip.endswith('.254'):
                                     print(f"🔍 [MACDetector] Encontrado gateway en ARP: {mac} (IP: {ip})")
                                     return mac
-            else:
-                # Linux/macOS
+            
+            else:  # Linux o macOS
+                # Método 1: ip neighbor (más moderno en Linux)
+                try:
+                    result = subprocess.run(['ip', 'neighbor', 'show'], 
+                                           capture_output=True, text=True)
+                    if result.returncode == 0:
+                        lines = result.stdout.split('\n')
+                        for line in lines:
+                            if not line.strip():
+                                continue
+                            parts = line.split()
+                            if len(parts) >= 5:
+                                ip = parts[0]
+                                mac = parts[4].upper()
+                                state = parts[5] if len(parts) > 5 else ''
+                                
+                                # Preferir dispositivos con estado REACHABLE
+                                if (mac != current_mac and 
+                                    not self._is_random_mac_by_pattern(mac) and
+                                    state in ['REACHABLE', 'STALE']):
+                                    # Verificar si es gateway común
+                                    if ip.endswith('.1') or ip.endswith('.254'):
+                                        print(f"🔍 [MACDetector] Gateway en ip neighbor: {mac}")
+                                        return mac
+                except:
+                    pass
+                
+                # Método 2: arp -a (tradicional)
                 result = subprocess.run(['arp', '-a'], capture_output=True, text=True)
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
                     for line in lines:
-                        match = re.search(r'at\s+([0-9A-Fa-f:]{17})', line)
-                        if match:
-                            mac = match.group(1).upper()
+                        # Formato Linux/macOS: ? (192.168.1.1) at 00:11:22:33:44:55 [ether] on wlan0
+                        ip_match = re.search(r'\((\d+\.\d+\.\d+\.\d+)\)', line)
+                        mac_match = re.search(r'at\s+([0-9a-fA-F:]{17})', line)
+                        
+                        if ip_match and mac_match:
+                            ip = ip_match.group(1)
+                            mac = mac_match.group(1).upper()
+                            
                             if mac != current_mac and not self._is_random_mac_by_pattern(mac):
-                                return mac
+                                if ip.endswith('.1') or ip.endswith('.254'):
+                                    print(f"🔍 [MACDetector] Gateway en arp -a: {mac}")
+                                    return mac
             
             return None
             
@@ -197,23 +238,30 @@ class MACDetector:
     def _scan_network_neighbors(self, ssid: str, current_mac: str) -> Optional[str]:
         """Escanea vecinos de red usando diferentes herramientas."""
         try:
-            system = platform.system().lower()
+            if not self.is_linux:
+                return None  # Este método es principalmente para Linux
             
-            if system == "linux":
-                result = subprocess.run(['ip', 'neigh', 'show'], capture_output=True, text=True)
-                if result.returncode == 0:
-                    lines = result.stdout.split('\n')
-                    for line in lines:
-                        parts = line.split()
-                        if len(parts) >= 5:
-                            mac = parts[4].upper()
-                            state = parts[5] if len(parts) > 5 else ''
-                            
-                            # Preferir dispositivos con estado REACHABLE o STALE
-                            if (mac != current_mac and 
-                                not self._is_random_mac_by_pattern(mac) and
-                                state in ['REACHABLE', 'STALE', 'DELAY']):
-                                return mac
+            print("🔍 [MACDetector] Escaneando vecinos de red (Linux)...")
+            
+            # Usar ip neighbor con más opciones
+            result = subprocess.run(['ip', '-br', 'neigh', 'show'], capture_output=True, text=True)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        ip = parts[0]
+                        mac = parts[2].upper() if len(parts) > 2 else ""
+                        state = parts[3] if len(parts) > 3 else ""
+                        
+                        if (mac and mac != current_mac and 
+                            not self._is_random_mac_by_pattern(mac) and
+                            state in ['REACHABLE', 'STALE']):
+                            print(f"🔍 [MACDetector] Vecino encontrado: {mac} ({state})")
+                            return mac
             
             return None
             
@@ -225,27 +273,18 @@ class MACDetector:
         """Obtiene la MAC del gateway por defecto."""
         try:
             # Obtener gateway
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("8.8.8.8", 80))
-                gateway_ip = s.getsockname()[0].rsplit('.', 1)[0] + '.1'
+            gateway_ip = self._get_default_gateway_ip()
+            if not gateway_ip:
+                print("❌ [MACDetector] No se pudo obtener gateway IP")
+                return None
             
             print(f"🔍 [MACDetector] Gateway IP: {gateway_ip}")
             
-            # Hacer ARP ping al gateway
-            system = platform.system().lower()
-            if system == "windows":
-                result = subprocess.run(['arp', '-a', gateway_ip], capture_output=True, text=True)
-            else:
-                result = subprocess.run(['arp', '-a', gateway_ip], capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                output = result.stdout
-                mac_match = re.search(r'([0-9A-Fa-f][0-9A-Fa-f][:-]){5}([0-9A-Fa-f][0-9A-Fa-f])', output)
-                if mac_match:
-                    mac = mac_match.group(0).replace('-', ':').upper()
-                    if mac != current_mac and not self._is_random_mac_by_pattern(mac):
-                        print(f"🔍 [MACDetector] Gateway MAC encontrada: {mac}")
-                        return mac
+            # Intentar obtener MAC del gateway
+            mac = self._get_mac_from_ip(gateway_ip)
+            if mac and mac != current_mac and not self._is_random_mac_by_pattern(mac):
+                print(f"🔍 [MACDetector] Gateway MAC encontrada: {mac}")
+                return mac
             
             return None
             
@@ -253,13 +292,103 @@ class MACDetector:
             print(f"❌ [MACDetector] Error en _check_gateway_mac: {e}")
             return None
     
+    def _get_default_gateway_ip(self) -> Optional[str]:
+        """Obtiene la IP del gateway por defecto según el SO."""
+        try:
+            if self.is_windows:
+                result = subprocess.run(['ipconfig'], capture_output=True, text=True, 
+                                       encoding='cp850', errors='replace')
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    for i, line in enumerate(lines):
+                        if "Default Gateway" in line or "Puerta de enlace predeterminada" in line:
+                            for j in range(i, min(i+5, len(lines))):
+                                ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', lines[j])
+                                if ip_match:
+                                    return ip_match.group(1)
+            
+            elif self.is_linux or self.is_macos:
+                # Método 1: ip route
+                try:
+                    result = subprocess.run(['ip', 'route', 'show', 'default'], 
+                                           capture_output=True, text=True)
+                    if result.returncode == 0:
+                        match = re.search(r'default via ([\d\.]+)', result.stdout)
+                        if match:
+                            return match.group(1)
+                except:
+                    pass
+                
+                # Método 2: netstat
+                try:
+                    result = subprocess.run(['netstat', '-rn'], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        for line in result.stdout.splitlines():
+                            if line.startswith('0.0.0.0') or line.startswith('default'):
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    return parts[1]
+                except:
+                    pass
+                
+                # Método 3: route
+                try:
+                    result = subprocess.run(['route', '-n'], capture_output=True, text=True)
+                    if result.returncode == 0:
+                        for line in result.stdout.splitlines():
+                            if line.startswith('0.0.0.0'):
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    return parts[1]
+                except:
+                    pass
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ [MACDetector] Error obteniendo gateway: {e}")
+            return None
+    
+    def _get_mac_from_ip(self, ip: str) -> Optional[str]:
+        """Obtiene la MAC de una IP específica."""
+        try:
+            # Hacer ping primero para actualizar cache ARP
+            subprocess.run(['ping', '-c', '1', '-W', '1', ip], 
+                          capture_output=True, timeout=2)
+            
+            if self.is_windows:
+                result = subprocess.run(['arp', '-a', ip], capture_output=True, text=True)
+            else:
+                result = subprocess.run(['arp', '-n', ip], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                output = result.stdout
+                
+                # Patrones para diferentes formatos
+                patterns = [
+                    r'([0-9A-Fa-f][0-9A-Fa-f][:-]){5}([0-9A-Fa-f][0-9A-Fa-f])',
+                    r'at\s+([0-9a-fA-F:]{17})',
+                    r'([0-9A-Fa-f-]{17})'
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, output)
+                    if match:
+                        mac = match.group(0).replace('-', ':').upper()
+                        if re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', mac):
+                            return mac
+            
+            return None
+            
+        except:
+            return None
+    
     def _scan_wifi_networks(self, ssid: str, current_mac: str) -> Optional[str]:
         """Escanea redes WiFi cercanas para encontrar el mismo SSID con diferente BSSID."""
         try:
-            system = platform.system().lower()
             target_ssid_clean = ssid.strip().lower()
             
-            if system == "windows":
+            if self.is_windows:
                 result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'], 
                                       capture_output=True, text=True, encoding='utf-8', errors='ignore')
                 if result.returncode == 0:
@@ -276,21 +405,76 @@ class MACDetector:
                             print(f"🔍 [MACDetector] Encontrada en WiFi scan: {mac_clean}")
                             return mac_clean
             
-            elif system == "linux":
-                result = subprocess.run(['nmcli', '-t', '-f', 'SSID,BSSID,SIGNAL', 'dev', 'wifi'], 
+            elif self.is_linux:
+                # Método 1: nmcli (moderno)
+                try:
+                    result = subprocess.run(['nmcli', '-t', '-f', 'SSID,BSSID,SIGNAL', 'dev', 'wifi', 'list'], 
+                                          capture_output=True, text=True)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        for line in lines:
+                            parts = line.split(':')
+                            if len(parts) >= 3:
+                                line_ssid = parts[0]
+                                bssid_raw = parts[1]
+                                # Manejar formato con \: en nmcli
+                                bssid = bssid_raw.replace('\\:', ':').upper()
+                                
+                                if (line_ssid.lower() == target_ssid_clean and 
+                                    bssid != current_mac and 
+                                    not self._is_random_mac_by_pattern(bssid)):
+                                    print(f"🔍 [MACDetector] Encontrada con nmcli: {bssid}")
+                                    return bssid
+                except:
+                    pass
+                
+                # Método 2: iwlist (requiere root)
+                try:
+                    # Obtener interfaz WiFi
+                    interfaces = subprocess.run(['iw', 'dev'], capture_output=True, text=True)
+                    if interfaces.returncode == 0:
+                        for line in interfaces.stdout.splitlines():
+                            if 'Interface' in line:
+                                iface = line.split()[-1]
+                                result = subprocess.run(['sudo', 'iwlist', iface, 'scan'], 
+                                                      capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    output = result.stdout
+                                    
+                                    # Buscar SSID y BSSID
+                                    lines = output.split('\n')
+                                    current_bssid = None
+                                    
+                                    for line in lines:
+                                        if 'Address:' in line:
+                                            current_bssid = line.split(':')[1].strip().upper()
+                                        elif 'ESSID:' in line and current_bssid:
+                                            line_ssid = line.split(':')[1].strip().strip('"')
+                                            if (line_ssid.lower() == target_ssid_clean and 
+                                                current_bssid != current_mac and 
+                                                not self._is_random_mac_by_pattern(current_bssid)):
+                                                print(f"🔍 [MACDetector] Encontrada con iwlist: {current_bssid}")
+                                                return current_bssid
+                except:
+                    pass
+            
+            elif self.is_macos:
+                # macOS
+                result = subprocess.run(['/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport', '-s'], 
                                       capture_output=True, text=True)
                 if result.returncode == 0:
-                    lines = result.stdout.strip().split('\n')
+                    lines = result.stdout.split('\n')
                     for line in lines:
-                        parts = line.split(':')
+                        parts = re.split(r'\s+', line.strip())
                         if len(parts) >= 3:
                             line_ssid = parts[0]
-                            mac = parts[1].upper()
+                            bssid = parts[1].upper()
                             
                             if (line_ssid.lower() == target_ssid_clean and 
-                                mac != current_mac and 
-                                not self._is_random_mac_by_pattern(mac)):
-                                return mac
+                                bssid != current_mac and 
+                                not self._is_random_mac_by_pattern(bssid)):
+                                print(f"🔍 [MACDetector] Encontrada en macOS: {bssid}")
+                                return bssid
             
             return None
             
@@ -382,6 +566,7 @@ def detect_original_mac(ssid: str, bssid: str = None) -> Dict[str, Optional[str]
 # Pruebas del módulo
 if __name__ == "__main__":
     print("🔍 Probando detección de MAC original...")
+    print(f"📊 Sistema: {platform.system()} {platform.release()}")
     
     # Obtener información actual de WiFi
     wifi_info = get_connected_wifi_info()

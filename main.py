@@ -1,6 +1,6 @@
 # main.py
 """
-Escaneo WiFi y utilidades usando netsh (Windows).
+Escaneo WiFi y utilidades usando netsh (Windows) y nmcli (Linux).
 Versión corregida para español y formato específico.
 """
 
@@ -10,6 +10,7 @@ import subprocess
 import re
 import sys
 from os import system
+import platform
 
 # limpiar pantalla
 try:
@@ -145,8 +146,6 @@ def parse_netsh_output_corrected(output):
     """
     redes = []
     
-    # print("DEBUG - Iniciando parser mejorado")
-    
     lines = output.split('\n')
     current_ssid = None
     current_bssid = None
@@ -179,7 +178,6 @@ def parse_netsh_output_corrected(output):
             current_ssid = ssid_match.group(1).strip()
             ssid_auth = None
             ssid_cipher = None
-            # print(f"DEBUG - SSID encontrado: '{current_ssid}'")
             i += 1
             continue
         
@@ -201,7 +199,6 @@ def parse_netsh_output_corrected(output):
             
             current_bssid = clean_bssid(bssid_match.group(1))
             current_data = {'bssid': current_bssid}
-            # print(f"DEBUG - BSSID encontrado: {current_bssid}")
             i += 1
             continue
         
@@ -210,14 +207,12 @@ def parse_netsh_output_corrected(output):
             auth_match = re.search(r':\s*(.+)', line)
             if auth_match:
                 ssid_auth = auth_match.group(1).strip()
-                # print(f"DEBUG - Autenticación capturada: '{ssid_auth}'")
         
         # Capturar cifrado del SSID (está en el bloque del SSID)
         if current_ssid and ('cifrado' in line.lower() or 'encryption' in line.lower()):
             cipher_match = re.search(r':\s*(.+)', line)
             if cipher_match:
                 ssid_cipher = cipher_match.group(1).strip()
-                # print(f"DEBUG - Cifrado capturado: '{ssid_cipher}'")
         
         # Procesar información de señal y canal para la BSSID actual
         if current_bssid and current_ssid:
@@ -226,14 +221,12 @@ def parse_netsh_output_corrected(output):
                 sig_match = re.search(r'(\d+)%', line)
                 if sig_match:
                     current_data['signal'] = int(sig_match.group(1))
-                    # print(f"DEBUG - Señal: {current_data['signal']}%")
             
             # Canal
             elif 'canal' in line.lower() or 'channel' in line.lower():
                 chan_match = re.search(r'(\d+)', line)
                 if chan_match:
                     current_data['channel'] = int(chan_match.group(1))
-                    # print(f"DEBUG - Canal: {current_data['channel']}")
         
         i += 1
     
@@ -250,7 +243,6 @@ def parse_netsh_output_corrected(output):
             current_data['cipher'] = akm_info["cipher"]
         redes.append(create_network_from_data(current_ssid, current_data))
     
-    # print(f"DEBUG - Parser completado. {len(redes)} redes encontradas")
     return redes
 
 def create_network_from_data(ssid, data):
@@ -270,8 +262,6 @@ def create_network_from_data(ssid, data):
         cipher = data.get('cipher', '')
         # Detectar seguridad
         seguridad = parse_security_corrected(auth, cipher)
-    
-    # print(f"DEBUG create_network_from_data - auth: '{auth}', cipher: '{cipher}', seguridad: '{seguridad}'")
     
     return {
         "SSID": ssid,
@@ -295,8 +285,6 @@ def parse_security_corrected(auth, cipher):
     
     auth_lower = auth_str.lower().strip()
     cipher_lower = cipher_str.lower().strip()
-    
-    # print(f"DEBUG parse_security - auth: '{auth_lower}', cipher: '{cipher_lower}'")
     
     # Redes abiertas - patrones en español
     if any(x in auth_lower for x in ['abierta', 'open', 'libre']):
@@ -499,49 +487,138 @@ def channel_to_freq(channel):
 
 # ---------- Escaneo principal ----------
 def scan_wifi_netsh(environment="auto"):
-    """
-    Escanea redes WiFi usando netsh con soporte para español
-    """
+    so = platform.system().lower()
+
+    # Windows → usar netsh
+    if "windows" in so:
+        return scan_wifi_windows(environment)
+
+    # Linux → usar nmcli
+    else:
+        return scan_wifi_linux(environment)
+
+def scan_wifi_linux(environment="auto"):
+    print("Escaneando WiFi en Linux (nmcli)...")
+
     try:
-        print("Ejecutando escaneo WiFi...")
-        
-        # Ejecutar comando netsh
+        cmd = [
+            "nmcli", "-t",
+            "-f", "SSID,BSSID,SIGNAL,FREQ,CHAN,SECURITY",
+            "device", "wifi", "list"
+        ]
+
         result = subprocess.run(
-            ['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='ignore',
-            timeout=45
+            cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="ignore"
         )
-        
+
         if result.returncode != 0:
-            print(f"Error en netsh (código {result.returncode})")
-            if result.stderr:
-                print("Stderr:", result.stderr)
+            print("Error ejecutando nmcli:", result.stderr)
             return []
-        
-        output = result.stdout
-        
-        # Verificar si hay redes
-        if "No hay redes inalámbricas" in output or "No wireless networks" in output:
-            print("No se encontraron redes inalámbricas en el área")
-            return []
-        
-        # Usar parser corregido
-        redes = parse_netsh_output_corrected(output)
-        
-        if not redes:
-            print("No se pudieron parsear redes. Verificando formato de salida...")
-            return []
-        
+
+        redes = []
+
+        for raw in result.stdout.splitlines():
+            if not raw.strip():
+                continue
+
+            # Manejar \: en el BSSID
+            temp_line = raw.replace('\\:', '%%COLON%%')
+            parts = temp_line.split(':')
+            if len(parts) < 6:
+                continue
+
+            ssid, bssid_temp, signal_str, freq_raw, chan_str, security_raw = parts
+
+            # Restaurar : en BSSID
+            bssid = bssid_temp.replace('%%COLON%%', ':')
+            bssid = clean_bssid(bssid)
+
+            # Parsear señal (porcentaje a dBm)
+            try:
+                signal_percent = int(signal_str)
+                # Usar la misma función que Windows
+                signal_dbm = percentage_to_dbm(signal_percent)
+            except:
+                signal_dbm = -100
+
+            # Parsear frecuencia
+            freq = None
+            if "MHz" in freq_raw:
+                try:
+                    freq = int(freq_raw.replace("MHz", "").strip())
+                except:
+                    freq = None
+            elif freq_raw.strip().isdigit():
+                try:
+                    freq = int(freq_raw.strip())
+                except:
+                    freq = None
+
+            # Parsear canal
+            try:
+                chan = int(chan_str) if chan_str.strip().isdigit() else None
+            except:
+                chan = None
+
+            # Si no hay canal pero hay frecuencia, calcularlo
+            if not chan and freq:
+                chan = freq_to_channel(freq)
+                if chan == "Desconocido":
+                    chan = None
+
+            # Si no hay frecuencia pero hay canal, calcularla
+            if not freq and chan and chan != "Desconocido":
+                try:
+                    freq = channel_to_freq(int(chan))
+                except:
+                    freq = None
+
+            # Parsear seguridad
+            sec_low = security_raw.lower().strip()
+            auth = ""
+            cipher = ""
+
+            if "wpa3" in sec_low:
+                auth = "WPA3"
+            elif "wpa2" in sec_low:
+                auth = "WPA2"
+            elif "wpa1" in sec_low:
+                auth = "WPA"
+            elif "wep" in sec_low:
+                auth = "WEP"
+            elif any(x in sec_low for x in ["abierta", "open", "none"]):
+                auth = "Abierta"
+            else:
+                auth = "Desconocida"
+
+            # Detectar seguridad
+            seguridad = parse_security_corrected(auth, "")
+
+            # Crear diccionario con la misma estructura que Windows
+            red = {
+                "SSID": ssid,
+                "BSSID": bssid,
+                "Señal": signal_dbm,
+                "Frecuencia": freq,
+                "Banda": band_from_freq(freq) if freq else "Desconocida",
+                "Canal": chan if chan else "Desconocido",
+                "AnchoCanal": infer_channel_width(freq) if freq else "Desconocido",
+                "Seguridad": seguridad,
+                "Autenticación": auth,
+                "Cifrado": cipher,
+                "Tecnologia": infer_wifi_generation(freq) if freq else "Desconocida"
+            }
+
+            redes.append(red)
+
         # Detectar ambiente y calcular distancias
         detected_env = detect_environment(redes) if environment == "auto" else environment
-        
+
         for red in redes:
             est = estimate_distance_realistic(
-                red["Señal"], 
-                red["Frecuencia"] or 2412.0, 
+                red["Señal"],
+                red["Frecuencia"] or 2412,
                 detected_env
             )
             red.update({
@@ -549,14 +626,50 @@ def scan_wifi_netsh(environment="auto"):
                 "Ambiente": detected_env
             })
 
-        return sorted(redes, key=lambda x: x.get("Señal", -9999), reverse=True)
-        
-    except subprocess.TimeoutExpired:
-        print("Tiempo de espera agotado para el escaneo WiFi")
-        return []
+        return redes
+
     except Exception as e:
-        print(f"Error inesperado: {e}")
+        print("Error Linux:", e)
         return []
+
+
+def scan_wifi_windows(environment="auto"):
+    print("Escaneando WiFi en Windows (netsh)...")
+
+    result = subprocess.run(
+        ['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+        capture_output=True, text=True,
+        encoding='utf-8', errors='ignore'
+    )
+
+    if result.returncode != 0:
+        print("Error ejecutando netsh")
+        return []
+
+    output = result.stdout
+
+    # Reusar tu parser original
+    redes = parse_netsh_output_corrected(output)
+
+    if not redes:
+        print("Error: no se pudo parsear salida de netsh")
+        return []
+
+    # Procesar igual que en tu función actual
+    detected_env = detect_environment(redes) if environment == "auto" else environment
+
+    for red in redes:
+        est = estimate_distance_realistic(
+            red["Señal"],
+            red["Frecuencia"] or 2412.0,
+            detected_env
+        )
+        red.update({
+            "Estimacion_m": est,
+            "Ambiente": detected_env
+        })
+
+    return redes
 
 
 # ---------- Funciones de compatibilidad ----------
@@ -569,51 +682,62 @@ def scan_wifi(tx_power_dbm_default=20.0, path_loss_exp_default=3.2, wait_time=1.
 
 
 # ---------- Función principal ----------
-# if __name__ == "__main__":
-#     try:
-#         print("Escaneando redes WiFi con netsh (Windows)...")
-#         print("Esto puede tomar hasta 45 segundos...")
+'''if __name__ == "__main__":
+    try:
+        print("Escaneando redes WiFi...")
+        print("Detectando sistema operativo...")
         
-#         # Verificar que netsh existe
-#         try:
-#             subprocess.run(['netsh', '/?'], capture_output=True, timeout=5)
-#         except FileNotFoundError:
-#             print("ERROR: 'netsh' no encontrado. Este script solo funciona en Windows.")
-#             sys.exit(1)
+        so = platform.system()
+        print(f"Sistema: {so}")
         
-#         redes = scan_wifi_netsh(environment="auto")
+        if "windows" in so.lower():
+            print("Usando netsh (Windows)...")
+        else:
+            print("Usando nmcli (Linux)...")
         
-#         print(f"\n{'='*80}")
-#         print(f"ESCANEO COMPLETADO - {len(redes)} redes encontradas")
-#         if redes:
-#             print(f"Ambiente detectado: {redes[0]['Ambiente']}")
-#         print(f"{'='*80}")
+        print("Escaneando... Esto puede tomar unos segundos...")
         
-#         if redes:
-#             for i, r in enumerate(redes, 1):
-#                 print(f"\n--- Red #{i} ---")
-#                 print(f"SSID: {r['SSID']}")
-#                 print(f"BSSID: {r['BSSID']}")
-#                 print(f"Señal: {r['Señal']} dBm")
-#                 if r['Frecuencia']:
-#                     print(f"Frecuencia: {r['Frecuencia']} MHz")
-#                 print(f"Banda: {r['Banda']}")
-#                 if r['Canal']:
-#                     print(f"Canal: {r['Canal']}")
-#                 print(f"Seguridad: {r['Seguridad']}")
-#                 print(f"Autenticación: {r['Autenticación']}")
-#                 print(f"Cifrado: {r['Cifrado']}")
-#                 print(f"Ancho de canal: {r['AnchoCanal']}")
-#                 if r['Estimacion_m']:
-#                     print(f"Distancia estimada: {r['Estimacion_m']} metros")
-#                 print(f"Tecnología: {r['Tecnologia']}")
-#                 print(f"Ambiente: {r['Ambiente']}")
-#         else:
-#             print("\nNo se encontraron redes. Posibles causas:")
-#             print("1. El adaptador WiFi está apagado")
-#             print("2. No hay redes disponibles en el área")
-#             print("3. Problemas de permisos (ejecutar como administrador)")
-#             print("4. El controlador WiFi no funciona correctamente")
+        redes = scan_wifi_netsh(environment="auto")
+        
+        print(f"\n{'='*80}")
+        print(f"ESCANEO COMPLETADO - {len(redes)} redes encontradas")
+        if redes:
+            print(f"Ambiente detectado: {redes[0]['Ambiente']}")
+        print(f"{'='*80}")
+        
+        if redes:
+            for i, r in enumerate(redes, 1):
+                print(f"\n--- Red #{i} ---")
+                print(f"SSID: {r['SSID']}")
+                print(f"BSSID: {r['BSSID']}")
+                print(f"Señal: {r['Señal']} dBm")
+                if r['Frecuencia']:
+                    print(f"Frecuencia: {r['Frecuencia']} MHz")
+                print(f"Banda: {r['Banda']}")
+                if r['Canal'] and r['Canal'] != "Desconocido":
+                    print(f"Canal: {r['Canal']}")
+                print(f"Seguridad: {r['Seguridad']}")
+                if r['Autenticación']:
+                    print(f"Autenticación: {r['Autenticación']}")
+                if r['Cifrado']:
+                    print(f"Cifrado: {r['Cifrado']}")
+                print(f"Ancho de canal: {r['AnchoCanal']}")
+                if r['Estimacion_m']:
+                    print(f"Distancia estimada: {r['Estimacion_m']} metros")
+                print(f"Tecnología: {r['Tecnologia']}")
+                print(f"Ambiente: {r['Ambiente']}")
+        else:
+            print("\nNo se encontraron redes. Posibles causas:")
+            print("1. El adaptador WiFi está apagado")
+            print("2. No hay redes disponibles en el área")
+            print("3. Problemas de permisos (ejecutar como administrador/root)")
+            print("4. El controlador WiFi no funciona correctamente")
+            print("\nEn Linux, prueba ejecutar:")
+            print("  sudo nmcli device wifi list")
             
-#     except Exception as e:
-#         print(f"Error durante el escaneo: {e}")
+    except KeyboardInterrupt:
+        print("\n\nEscaneo cancelado por el usuario.")
+    except Exception as e:
+        print(f"Error durante el escaneo: {e}")
+        import traceback
+        traceback.print_exc()'''

@@ -5,6 +5,8 @@ import re
 import socket
 import psutil
 from typing import Dict, Optional, Tuple
+import os
+import sys
 
 def get_connected_wifi_info() -> Dict[str, Optional[str]]:
     """
@@ -119,82 +121,213 @@ def _get_macos_wifi_info() -> Dict[str, Optional[str]]:
 
 
 def _get_linux_wifi_info() -> Dict[str, Optional[str]]:
-    """Obtiene información WiFi en Linux (nmcli o iwconfig)"""
+    """Obtiene información WiFi en Linux (nmcli o iwconfig) - VERSIÓN MEJORADA"""
     try:
-        # --- nmcli ---
-        result = subprocess.run(
-            ['nmcli', '-t', '-f', 'ACTIVE,SSID,BSSID,SIGNAL', 'dev', 'wifi'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        # PRIMERO: Verificar si NetworkManager está activo (nmcli)
+        try:
+            result = subprocess.run(['systemctl', 'is-active', '--quiet', 'NetworkManager'], 
+                                  capture_output=True, text=True)
+            nm_active = result.returncode == 0
+        except:
+            nm_active = False
+        
+        # MÉTODO 1: nmcli (NetworkManager) - Si está disponible
+        if nm_active:
+            try:
+                print("[Linux WiFi] Usando nmcli...")
+                # Versión mejorada de nmcli
+                result = subprocess.run(
+                    ['nmcli', '-t', '-f', 'ACTIVE,SSID,BSSID,SIGNAL', 'device', 'wifi'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
 
-        if result.returncode == 0:
-            for line in result.stdout.strip().split('\n'):
-                if line.startswith('yes'):
-                    parts = line.split(':')
-                    if len(parts) >= 4:
-                        ssid = parts[1] if parts[1] else None
-                        bssid = parts[2].upper() if parts[2] else None
-                        signal_percent = parts[3] if parts[3] else None
-                        signal_dbm = f"-{100 - int(signal_percent)}" if signal_percent else None
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        if line and line.startswith('yes:'):
+                            parts = line.split(':')
+                            if len(parts) >= 4:
+                                ssid = parts[1] if parts[1] and parts[1] != '--' else None
+                                bssid_raw = parts[2] if len(parts) > 2 else ''
+                                signal_percent = parts[3] if len(parts) > 3 else None
+                                
+                                # Manejar formato con \: en BSSID
+                                bssid = bssid_raw.replace('\\:', ':').upper() if bssid_raw and bssid_raw != '--' else None
+                                
+                                # Convertir señal
+                                signal_dbm = None
+                                if signal_percent and signal_percent.isdigit():
+                                    signal_percent_int = int(signal_percent)
+                                    # Convertir porcentaje a dBm aproximado
+                                    signal_dbm = str(_percentage_to_dbm(signal_percent_int))
+                                
+                                ip_address = _get_local_ip_address()
+                                
+                                if ssid and ssid != '--':
+                                    return {
+                                        'connected': True,
+                                        'ssid': ssid,
+                                        'bssid': bssid,
+                                        'signal': signal_dbm,
+                                        'ip_address': ip_address
+                                    }
+            except Exception as e:
+                print(f"[Linux WiFi] Error con nmcli: {e}")
+        
+        # MÉTODO 2: iwconfig (tradicional)
+        try:
+            print("[Linux WiFi] Usando iwconfig...")
+            result = subprocess.run(['iwconfig'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                ssid = bssid = signal = None
+                output = result.stdout
+                
+                # Buscar interfaz WiFi
+                for line in output.split('\n'):
+                    line = line.strip()
+                    
+                    # Buscar SSID
+                    if 'ESSID:' in line:
+                        m = re.search(r'ESSID:"([^"]+)"', line)
+                        if m and m.group(1) and m.group(1).lower() not in ['off/any', '']:
+                            ssid = m.group(1)
+                    
+                    # Buscar BSSID
+                    if 'Access Point:' in line:
+                        m = re.search(r'Access Point:\s+([0-9A-Fa-f:]{17})', line)
+                        if m:
+                            bssid = m.group(1).upper()
+                    
+                    # Buscar señal
+                    if 'Signal level' in line:
+                        m = re.search(r'Signal level=(-?\d+)', line)
+                        if m:
+                            signal = m.group(1)
+                
+                connected = ssid is not None and ssid != ""
+                ip_address = _get_local_ip_address() if connected else None
+                
+                if connected:
+                    return {
+                        'connected': True,
+                        'ssid': ssid,
+                        'bssid': bssid,
+                        'signal': signal,
+                        'ip_address': ip_address
+                    }
+        except Exception as e:
+            print(f"[Linux WiFi] Error con iwconfig: {e}")
+        
+        # MÉTODO 3: iw (moderno)
+        try:
+            print("[Linux WiFi] Usando iw...")
+            # Encontrar interfaz WiFi
+            result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                interface = None
+                for line in lines:
+                    if 'Interface' in line:
+                        interface = line.split()[1]
+                        break
+                
+                if interface:
+                    result = subprocess.run(['iw', 'dev', interface, 'link'], 
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        output = result.stdout
+                        ssid = bssid = signal = None
+                        
+                        for line in output.split('\n'):
+                            if 'SSID:' in line:
+                                ssid = line.split('SSID:')[1].strip()
+                            elif 'Connected to' in line:
+                                m = re.search(r'([0-9a-f:]{17})', line)
+                                if m:
+                                    bssid = m.group(1).upper()
+                            elif 'signal:' in line:
+                                m = re.search(r'signal:\s*(-?\d+)', line)
+                                if m:
+                                    signal = m.group(1)
+                        
+                        connected = ssid is not None and ssid != ""
+                        ip_address = _get_local_ip_address() if connected else None
+                        
+                        if connected:
+                            return {
+                                'connected': True,
+                                'ssid': ssid,
+                                'bssid': bssid,
+                                'signal': signal,
+                                'ip_address': ip_address
+                            }
+        except Exception as e:
+            print(f"[Linux WiFi] Error con iw: {e}")
+        
+        # MÉTODO 4: Verificar archivos del sistema (/proc/net/wireless)
+        try:
+            print("[Linux WiFi] Verificando /proc/net/wireless...")
+            if os.path.exists('/proc/net/wireless'):
+                with open('/proc/net/wireless', 'r') as f:
+                    content = f.read()
+                    # Si hay contenido, probablemente hay conexión WiFi
+                    if content.strip():
+                        # Obtener SSID de otra forma
                         ip_address = _get_local_ip_address()
-                        return {
-                            'connected': True,
-                            'ssid': ssid,
-                            'bssid': bssid,
-                            'signal': signal_dbm,
-                            'ip_address': ip_address
-                        }
-
-        # --- iwconfig fallback ---
-        result = subprocess.run(['iwconfig'], capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            ssid = bssid = signal = None
-            for line in result.stdout.split('\n'):
-                if 'ESSID:' in line:
-                    m = re.search(r'ESSID:"([^"]+)"', line)
-                    if m:
-                        ssid = m.group(1)
-                if 'Access Point:' in line:
-                    m = re.search(r'Access Point:\s+([0-9A-Fa-f:]{17})', line)
-                    if m:
-                        bssid = m.group(1).upper()
-                if 'Signal level' in line:
-                    m = re.search(r'Signal level=(-?\d+)', line)
-                    if m:
-                        signal = m.group(1)
-
-            connected = ssid is not None and ssid != ""
-            ip_address = _get_local_ip_address() if connected else None
-
-            return {
-                'connected': connected,
-                'ssid': ssid if connected else None,
-                'bssid': bssid if connected else None,
-                'signal': signal if connected else None,
-                'ip_address': ip_address
-            }
-
+                        if ip_address:
+                            return {
+                                'connected': True,
+                                'ssid': 'WiFi (detectado)',
+                                'bssid': None,
+                                'signal': '-70',  # Valor por defecto
+                                'ip_address': ip_address
+                            }
+        except:
+            pass
+        
+        # Si llegamos aquí, no hay conexión WiFi activa
         return {'connected': False, 'ssid': None, 'bssid': None, 'signal': None, 'ip_address': None}
 
     except Exception as e:
-        print(f"[Linux WiFi] Error: {e}")
+        print(f"[Linux WiFi] Error general: {e}")
         return {'connected': False, 'ssid': None, 'bssid': None, 'signal': None, 'ip_address': None}
+
+
+def _percentage_to_dbm(percentage: int) -> int:
+    """Convierte porcentaje de señal a dBm aproximado"""
+    if percentage >= 100:
+        return -20
+    elif percentage <= 0:
+        return -100
+    else:
+        # Fórmula de conversión aproximada
+        return -50 - ((100 - percentage) * 0.5)
 
 
 def _get_local_ip_address() -> Optional[str]:
     """Obtiene la IP local (WiFi o Ethernet)"""
     try:
+        # Método 1: Socket UDP (más confiable)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
     except:
         try:
+            # Método 2: psutil (más completo)
             for iface, addrs in psutil.net_if_addrs().items():
-                for addr in addrs:
-                    if addr.family == socket.AF_INET and not addr.address.startswith('127.'):
-                        return addr.address
+                # Priorizar interfaces WiFi/inalámbricas
+                if any(x in iface.lower() for x in ['wlan', 'wlp', 'wifi', 'wireless']):
+                    for addr in addrs:
+                        if addr.family == socket.AF_INET and not addr.address.startswith('127.'):
+                            return addr.address
+                
+                # Luego interfaces ethernet
+                if any(x in iface.lower() for x in ['eth', 'enp', 'eno', 'ens']):
+                    for addr in addrs:
+                        if addr.family == socket.AF_INET and not addr.address.startswith('127.'):
+                            return addr.address
         except:
             pass
     return None
@@ -242,31 +375,58 @@ def _get_default_gateway() -> Optional[str]:
                             return gateway
         
         else:
-            # Linux/Mac
-            result = subprocess.run(
-                ["ip", "route", "show", "default"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            m = re.search(r"default via ([\d.]+)", result.stdout)
-            if m:
-                return m.group(1)
+            # Linux/Mac - Métodos múltiples
+            methods = [
+                # Método 1: ip route (moderno)
+                lambda: subprocess.run(["ip", "route", "show", "default"], 
+                                     capture_output=True, text=True, timeout=5),
+                # Método 2: netstat (tradicional)
+                lambda: subprocess.run(["netstat", "-rn"], 
+                                     capture_output=True, text=True, timeout=5),
+                # Método 3: route (antiguo)
+                lambda: subprocess.run(["route", "-n"], 
+                                     capture_output=True, text=True, timeout=5),
+            ]
+            
+            for method in methods:
+                try:
+                    result = method()
+                    if result.returncode == 0:
+                        output = result.stdout
+                        
+                        # Buscar gateway en diferentes formatos
+                        for line in output.split('\n'):
+                            if 'default' in line or '0.0.0.0' in line:
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    # Intentar extraer IP
+                                    for part in parts:
+                                        if re.match(r'\d+\.\d+\.\d+\.\d+', part):
+                                            return part
+                except:
+                    continue
+            
+            # Fallback para Linux
+            local_ip = _get_local_ip_address()
+            if local_ip:
+                parts = local_ip.split('.')
+                if len(parts) == 4:
+                    return f"{parts[0]}.{parts[1]}.{parts[2]}.1"
                 
     except Exception as e:
         print(f"[Gateway] Error detectando gateway: {e}")
     
     # Último fallback
-    return None
+    return "8.8.8.8"  # Google DNS como último recurso
 
 
 def _measure_network_metrics() -> Tuple[float, float]:
-    """Mide latencia y pérdida de paquetes - versión mejorada"""
+    """Mide latencia y pérdida de paquetes - versión mejorada para Linux"""
     try:
         gateway = _get_default_gateway()
         
         # Si no hay gateway, usar Google DNS como fallback
-        if not gateway:
+        if not gateway or gateway == "0.0.0.0":
             gateway = "8.8.8.8"
             print(f"   ⚠️  Usando fallback: {gateway}")
         
@@ -281,10 +441,6 @@ def _measure_network_metrics() -> Tuple[float, float]:
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         output = result.stdout
-
-        # print(f"\n=== DEBUG PING a {gateway} ===\n")
-        # print(output)
-        # print("=========================\n")
 
         # --- WINDOWS ---
         if system == "windows":
@@ -301,7 +457,13 @@ def _measure_network_metrics() -> Tuple[float, float]:
             loss_match = re.search(r"(\d+)% packet loss", output)
             packet_loss = float(loss_match.group(1)) if loss_match else 100.0
 
+            # Buscar tiempo promedio (diferentes formatos)
             time_match = re.search(r"= [\d.]+/([\d.]+)/", output)
+            if not time_match:
+                time_match = re.search(r"min/avg/max/mdev = [\d.]+/([\d.]+)/", output)
+            if not time_match:
+                time_match = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", output)
+            
             latency = float(time_match.group(1)) if time_match else 999.0
 
         return latency, packet_loss
@@ -338,6 +500,7 @@ def is_connected_to_network(target_ssid: str, target_bssid: str = None) -> bool:
     
     # Si tenemos BSSID, lo usamos como verificación adicional
     if target_bssid and wifi['bssid']:
+        # Limpiar ambos BSSID
         c = re.sub(r'[^0-9A-F]', '', wifi['bssid'].upper())
         t = re.sub(r'[^0-9A-F]', '', target_bssid.upper())
         return ssid_match and (c == t)
@@ -356,6 +519,7 @@ def get_network_congestion(interface: str = None) -> Dict[str, float]:
                 'signal_quality': 0.0
             }
 
+        # Calcular calidad de señal
         signal_quality = _calculate_signal_quality(wifi_info.get('signal'))
         
         # Si la señal es buena, asumir conexión estable incluso si ping falla
@@ -392,7 +556,18 @@ def _calculate_signal_quality(signal_dbm: Optional[str]) -> float:
     try:
         if not signal_dbm:
             return 50.0
-        dbm = float(signal_dbm)
+        
+        # Si es string, convertir a float
+        if isinstance(signal_dbm, str):
+            # Eliminar caracteres no numéricos
+            signal_str = re.sub(r'[^\d.-]', '', signal_dbm)
+            if not signal_str:
+                return 50.0
+            dbm = float(signal_str)
+        else:
+            dbm = float(signal_dbm)
+            
+        # Calcular calidad
         if dbm >= -30: return 100.0
         if dbm >= -50: return 90.0
         if dbm >= -60: return 80.0
@@ -403,53 +578,6 @@ def _calculate_signal_quality(signal_dbm: Optional[str]) -> float:
         return 10.0
     except:
         return 50.0
-
-
-def _measure_network_metrics() -> Tuple[float, float]:
-    """Mide latencia y pérdida de paquetes hacia el gateway."""
-    try:
-        gateway = _get_default_gateway()
-        if not gateway:
-            return 999.0, 100.0
-
-        count = 3
-        timeout = 2
-        system = platform.system().lower()
-        if system == "windows":
-            cmd = ["ping", "-n", str(count), "-w", str(timeout * 1000), gateway]
-        else:
-            cmd = ["ping", "-c", str(count), "-W", str(timeout), gateway]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
-        output = result.stdout
-
-        # print("\n=== DEBUG SALIDA PING ===\n")
-        # print(output)
-        # print("=========================\n")
-
-        # --- WINDOWS ---
-        if system == "windows":
-            # porcentaje de pérdida
-            loss_match = re.search(r"(\d+)%\s*perdidos", output, re.IGNORECASE)
-            packet_loss = float(loss_match.group(1)) if loss_match else 100.0
-
-            # tiempo promedio
-            time_match = re.search(r"media\s*=\s*(\d+)\s*ms", output, re.IGNORECASE)
-            latency = float(time_match.group(1)) if time_match else 999.0
-
-        # --- LINUX / MAC ---
-        else:
-            loss_match = re.search(r"(\d+)% packet loss", output)
-            packet_loss = float(loss_match.group(1)) if loss_match else 100.0
-
-            time_match = re.search(r"= [\d.]+/([\d.]+)/", output)
-            latency = float(time_match.group(1)) if time_match else 999.0
-
-        return latency, packet_loss
-
-    except Exception as e:
-        print(f"[Ping] Error midiendo métricas: {e}")
-        return 999.0, 100.0
 
 
 def _calculate_stability(signal_quality: float, packet_loss: float, latency: float) -> float:
@@ -474,22 +602,33 @@ def get_current_network_info() -> Dict[str, Optional[str]]:
     Alias de get_connected_wifi_info para compatibilidad con ap_device_scanner.
     """
     return get_connected_wifi_info()
+
 # === PRUEBA RÁPIDA ===
 if __name__ == "__main__":
-    print("Detectando WiFi...")
+    print("=" * 50)
+    print("🔍 DETECTANDO INFORMACIÓN DE RED")
+    print("=" * 50)
+    
     info = get_connected_wifi_info()
-    print(f"Conectado: {info['connected']}")
-    print(f"SSID: {info['ssid']}")
-    print(f"BSSID: {info['bssid']}")
-    print(f"Señal: {info['signal']} dBm")
-    print(f"IP: {info['ip_address']}")
+    print(f"📶 Conectado: {info['connected']}")
+    print(f"📡 SSID: {info['ssid']}")
+    print(f"📱 BSSID: {info['bssid']}")
+    print(f"📊 Señal: {info['signal']} dBm")
+    print(f"📍 IP: {info['ip_address']}")
+    
+    # Gateway
+    gateway = _get_default_gateway()
+    print(f"🚪 Gateway: {gateway}")
 
     if info['connected']:
-        print("\nCongestión:")
+        print("\n📈 MÉTRICAS DE RED:")
         c = get_network_congestion()
-        print(f"Estabilidad: {c['stability_percentage']:.1f}%")
-        print(f"Pérdida: {c['packet_loss']:.1f}%")
-        print(f"Latencia: {c['latency']:.1f} ms")
-        print(f"Señal: {c['signal_quality']:.1f}%")
+        print(f"   Estabilidad: {c['stability_percentage']:.1f}%")
+        print(f"   Pérdida de paquetes: {c['packet_loss']:.1f}%")
+        print(f"   Latencia: {c['latency']:.1f} ms")
+        print(f"   Calidad de señal: {c['signal_quality']:.1f}%")
 
-        print(f"\n¿Conectado a red actual?: {is_connected_to_network(info['ssid'])}")
+        if info['ssid']:
+            print(f"\n🔗 ¿Conectado a {info['ssid']}?: {is_connected_to_network(info['ssid'])}")
+    
+    print("=" * 50)

@@ -1743,7 +1743,6 @@ class MainWindow(QMainWindow):
 
 # ----------------- Main -----------------
 def main():
- 
     app = QApplication(sys.argv)
     
     # Establecer estilo de aplicación
@@ -1754,13 +1753,16 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
         
-        # Forzar icono en la barra de tareas (Windows)
-        import ctypes
-        myappid = 'corporate.wifi.scanner.1.0'
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        # --- Forzar icono en la barra de tareas (SOLO WINDOWS) ---
+        print(platform.system() )
+        if platform.system() == "Windows":
+            import ctypes
+            myappid = 'corporate.wifi.scanner.1.0'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     
     window = MainWindow()
     window.show()
+
     
     # Manejar cierre limpio de la aplicación
     def handle_application_quit():

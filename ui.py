@@ -71,6 +71,23 @@ except ImportError:
             "confidence": "low"
         }
 
+# ----------------- Configuración visual profesional -----------------
+CARD_WIDTH = 320
+CARD_HEIGHT = 160
+
+# Colores corporativos profesionales
+COLOR_BG = "#1E1E1E"          # Fondo principal oscuro
+COLOR_CARD = "#2D2D2D"        # Fondo de tarjetas
+COLOR_CARD_BORDER = "#404040" # Borde de tarjetas
+COLOR_TEXT = "#E0E0E0"        # Texto principal
+COLOR_ACCENT = "#0078D4"      # Azul corporativo
+COLOR_SUCCESS = "#107C10"     # Verde éxito
+COLOR_WARNING = "#D83B01"     # Naranja advertencia
+COLOR_ERROR = "#E81123"       # Rojo error
+COLOR_MUTED = "#848484"       # Texto secundario
+COLOR_NoCONETCT = "#79A3A1"
+
+
 # ==================== NUEVO WORKER PARA VELOCIDAD ====================
 class SpeedTestWorker(QThread):
     finished = pyqtSignal(dict)
@@ -158,21 +175,6 @@ class SuggestionWindow(QDialog):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-# ----------------- Configuración visual profesional -----------------
-CARD_WIDTH = 320
-CARD_HEIGHT = 160
-
-# Colores corporativos profesionales
-COLOR_BG = "#1E1E1E"          # Fondo principal oscuro
-COLOR_CARD = "#2D2D2D"        # Fondo de tarjetas
-COLOR_CARD_BORDER = "#404040" # Borde de tarjetas
-COLOR_TEXT = "#E0E0E0"        # Texto principal
-COLOR_ACCENT = "#0078D4"      # Azul corporativo
-COLOR_SUCCESS = "#107C10"     # Verde éxito
-COLOR_WARNING = "#D83B01"     # Naranja advertencia
-COLOR_ERROR = "#E81123"       # Rojo error
-COLOR_MUTED = "#848484"       # Texto secundario
-COLOR_NoCONETCT = "#79A3A1"
 
 # Colores para estados de señal
 def signal_color_by_dbm(signal_dbm: Optional[float]) -> str:
@@ -1067,6 +1069,9 @@ class NetworkDetailsDialog(QDialog):
         self.mac_original = bssid
         self.esta_conectado_a_red = False
         
+        # Diccionario para guardar textos originales de botones
+        self.botones_texto_original = {}
+        
         # Establecer icono
         self.set_icon()
         
@@ -1304,13 +1309,14 @@ class NetworkDetailsDialog(QDialog):
             if self.esta_conectado_a_red:
                 self.btn_devices.setText("⏳ Esperando fabricante...")
         elif has_active_suggestions:
-            self.btn_tecn.setText("🔄 Analizando...")
-            self.btn_proto.setText("🔄 Analizando...")
-            if self.esta_conectado_a_red:
-                self.btn_devices.setText("📱 Ver Dispositivos Conectados")
+            # No cambiar el texto aquí porque ya lo cambiamos en _handle_sugerencia
+            pass
         else:
-            self.btn_tecn.setText("🔍 Análisis de Tecnología")
-            self.btn_proto.setText("🔒 Análisis de Protocolo")
+            # Restaurar textos originales SOLO si no hay textos guardados
+            if "tecnologia" not in self.botones_texto_original:
+                self.btn_tecn.setText("🔍 Análisis de Tecnología")
+            if "protocolo" not in self.botones_texto_original:
+                self.btn_proto.setText("🔒 Análisis de Protocolo")
             if self.esta_conectado_a_red:
                 self.btn_devices.setText("📱 Ver Dispositivos Conectados")
 
@@ -1361,25 +1367,86 @@ class NetworkDetailsDialog(QDialog):
             
     def _handle_sugerencia(self, tipo):
         """Manejar solicitud de sugerencia"""
+        print(f"🔄 Iniciando análisis de {tipo}")  # Debug
+        
         if not self.vendor_completed or self._is_closing:
+            print(f"❌ No se puede analizar: vendor_completed={self.vendor_completed}, _is_closing={self._is_closing}")
             return
 
         if tipo in self.suggestion_workers and self.suggestion_workers[tipo].isRunning():
+            print(f"⏳ Ya hay un análisis de {tipo} en curso")
             return
+
+        # Guardar texto original y cambiar el texto del botón correspondiente a "Analizando..."
+        if tipo == "tecnologia":
+            self.botones_texto_original[tipo] = self.btn_tecn.text()
+            self.btn_tecn.setText("🔄 Analizando...")
+            self.btn_tecn.setEnabled(False)
+            print(f"🔍 Botón tecnología cambiado a: {self.btn_tecn.text()}")
+        else:  # protocolo
+            self.botones_texto_original[tipo] = self.btn_proto.text()
+            self.btn_proto.setText("🔄 Analizando...")
+            self.btn_proto.setEnabled(False)
+            print(f"🔒 Botón protocolo cambiado a: {self.btn_proto.text()}")
 
         worker = SuggestionWorker(self.red_meta, tipo)
         self.suggestion_workers[tipo] = worker
         
         worker.finished.connect(lambda result: self._on_suggestion_finished(tipo, result))
-        worker.error.connect(lambda e: print(f"Error sugerencia: {e}"))
+        worker.error.connect(lambda e: self._on_suggestion_error(tipo, e))
         worker.finished.connect(worker.deleteLater)
         
         self._update_buttons_state()
         worker.start()
+        print(f"✅ Worker de {tipo} iniciado")
+
+    def _on_suggestion_error(self, tipo, error_msg):
+        """Callback cuando hay error en la sugerencia"""
+        print(f"❌ Error sugerencia {tipo}: {error_msg}")
+        
+        # Restaurar el texto original del botón
+        if tipo in self.botones_texto_original:
+            texto_original = self.botones_texto_original[tipo]
+            if tipo == "tecnologia":
+                self.btn_tecn.setText(texto_original)
+                self.btn_tecn.setEnabled(True)
+                print(f"🔍 Botón tecnología restaurado a: {self.btn_tecn.text()}")
+            else:
+                self.btn_proto.setText(texto_original)
+                self.btn_proto.setEnabled(True)
+                print(f"🔒 Botón protocolo restaurado a: {self.btn_proto.text()}")
+            del self.botones_texto_original[tipo]
+        
+        # Mostrar mensaje de error
+        QMessageBox.warning(
+            self,
+            "Error en análisis",
+            f"No se pudo completar el análisis de {tipo}.\n\nError: {error_msg}"
+        )
+        
+        if tipo in self.suggestion_workers:
+            del self.suggestion_workers[tipo]
+        self._update_buttons_state()
 
     def _on_suggestion_finished(self, tipo, result):
         """Callback cuando termina una sugerencia"""
+        print(f"✅ Análisis de {tipo} completado")  # Debug
+        
         if not self._is_closing and tipo in self.suggestion_workers:
+            
+            # Restaurar el texto original del botón
+            if tipo in self.botones_texto_original:
+                texto_original = self.botones_texto_original[tipo]
+                if tipo == "tecnologia":
+                    self.btn_tecn.setText(texto_original)
+                    self.btn_tecn.setEnabled(True)
+                    print(f"🔍 Botón tecnología restaurado a: {self.btn_tecn.text()}")
+                else:
+                    self.btn_proto.setText(texto_original)
+                    self.btn_proto.setEnabled(True)
+                    print(f"🔒 Botón protocolo restaurado a: {self.btn_proto.text()}")
+                del self.botones_texto_original[tipo]
+            
             del self.suggestion_workers[tipo]
             self._update_buttons_state()
             
@@ -1416,9 +1483,9 @@ class NetworkDetailsDialog(QDialog):
         # Limpiar referencias
         self.vendor_worker = None
         self.suggestion_workers.clear()
+        self.botones_texto_original.clear()
         
         event.accept()
-
 # ----------------- Main Window Profesional -----------------
 class MainWindow(QMainWindow):
     def __init__(self):

@@ -20,36 +20,158 @@ except Exception:
 
 # ---------- NUEVA FUNCIÓN: Detección AKM ----------
 def get_akm_security(ssid_name):
-    """Obtiene información de seguridad AKM del perfil guardado"""
-    try:
-        result = subprocess.run(
-            ['netsh', 'wlan', 'show', 'profile', f'name={ssid_name}', 'key=clear'],
-            capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=5
-        )
-        
-        if result.returncode != 0:
+    """Obtiene información de seguridad AKM del perfil guardado - Compatible Windows/Linux"""
+    sistema = platform.system().lower()
+    
+    # WINDOWS - Usar netsh
+    if "windows" in sistema:
+        try:
+            result = subprocess.run(
+                ['netsh', 'wlan', 'show', 'profile', f'name={ssid_name}', 'key=clear'],
+                capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=5
+            )
+            
+            if result.returncode != 0:
+                return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
+            
+            output = result.stdout
+            
+            # Buscar autenticación y cifrado
+            auth_match = re.search(r'Autenticaci[oó]n\s*:\s*(.+)', output, re.IGNORECASE)
+            cipher_match = re.search(r'Cifrado\s*:\s*(.+)', output, re.IGNORECASE)
+            
+            auth = auth_match.group(1).strip() if auth_match else "No disponible"
+            cipher = cipher_match.group(1).strip() if cipher_match else "No disponible"
+            
+            # Detección AKM
+            seguridad = detect_akm_security(auth, cipher, output)
+            
+            return {
+                "seguridad": seguridad,
+                "auth": auth,
+                "cipher": cipher
+            }
+            
+        except Exception as e:
+            print(f"Error en Windows: {e}")
             return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
-        
-        output = result.stdout
-        
-        # Buscar autenticación y cifrado
-        auth_match = re.search(r'Autenticaci[oó]n\s*:\s*(.+)', output, re.IGNORECASE)
-        cipher_match = re.search(r'Cifrado\s*:\s*(.+)', output, re.IGNORECASE)
-        
-        auth = auth_match.group(1).strip() if auth_match else "No disponible"
-        cipher = cipher_match.group(1).strip() if cipher_match else "No disponible"
-        
-        # Detección AKM
-        seguridad = detect_akm_security(auth, cipher, output)
-        
-        return {
-            "seguridad": seguridad,
-            "auth": auth,
-            "cipher": cipher
-        }
-        
-    except Exception:
-        return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
+    
+    # LINUX - Usar nmcli
+    else:
+        try:
+            # En Linux, obtener detalles de la conexión guardada
+            # Primero, buscar conexiones que coincidan con el SSID
+            result = subprocess.run(
+                ['nmcli', '-t', '-f', 'NAME,UUID,TYPE', 'connection', 'show'],
+                capture_output=True, text=True, encoding='utf-8', errors='ignore'
+            )
+            
+            if result.returncode != 0:
+                return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
+            
+            # Buscar si hay una conexión wifi con ese nombre
+            conexiones = result.stdout.splitlines()
+            conexion_encontrada = None
+            
+            for conn in conexiones:
+                parts = conn.split(':')
+                if len(parts) >= 3 and parts[2] == '802-11-wireless' and ssid_name in parts[0]:
+                    conexion_encontrada = parts[0]
+                    break
+            
+            if not conexion_encontrada:
+                # Intentar búsqueda más amplia por si el SSID es el nombre exacto
+                for conn in conexiones:
+                    parts = conn.split(':')
+                    if len(parts) >= 1 and parts[0] == ssid_name:
+                        conexion_encontrada = parts[0]
+                        break
+            
+            if not conexion_encontrada:
+                return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
+            
+            # Obtener detalles completos de la conexión
+            result = subprocess.run(
+                ['nmcli', '-t', 'connection', 'show', conexion_encontrada],
+                capture_output=True, text=True, encoding='utf-8', errors='ignore'
+            )
+            
+            if result.returncode != 0:
+                return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
+            
+            output = result.stdout
+            
+            # Inicializar variables
+            auth = "No disponible"
+            cipher = "No disponible"
+            seguridad = "Desconocida"
+            
+            # Buscar key-mgmt (tipo de autenticación)
+            key_mgmt_match = re.search(r'802-11-wireless-security.key-mgmt:(.+)', output)
+            if key_mgmt_match:
+                key_mgmt = key_mgmt_match.group(1).strip()
+                
+                if 'wpa3' in key_mgmt.lower():
+                    auth = "WPA3"
+                    if 'sae' in key_mgmt.lower():
+                        seguridad = "WPA3-Personal (SAE)"
+                    else:
+                        seguridad = "WPA3-Personal"
+                elif 'wpa2' in key_mgmt.lower() or 'wpa-psk' in key_mgmt.lower():
+                    auth = "WPA2"
+                    seguridad = "WPA2-PSK"
+                elif 'wpa' in key_mgmt.lower():
+                    auth = "WPA"
+                    seguridad = "WPA-PSK"
+                elif 'owe' in key_mgmt.lower():
+                    auth = "OWE"
+                    seguridad = "OWE"
+                elif 'none' in key_mgmt.lower():
+                    auth = "Abierta"
+                    seguridad = "Abierta"
+            
+            # Buscar proto (protocolo de seguridad) - AQUÍ ESTÁ EL CIFRADO
+            proto_match = re.search(r'802-11-wireless-security.proto:(.+)', output)
+            if proto_match:
+                proto_val = proto_match.group(1).strip()
+                if 'wpa' in proto_val.lower():
+                    cipher = proto_val.upper()
+            
+            # Buscar pairwise (cifrado específico)
+            pairwise_match = re.search(r'802-11-wireless-security.pairwise:(.+)', output)
+            if pairwise_match:
+                pairwise_val = pairwise_match.group(1).strip()
+                if 'ccmp' in pairwise_val.lower() or 'aes' in pairwise_val.lower():
+                    cipher = "CCMP/AES"
+                elif 'tkip' in pairwise_val.lower():
+                    cipher = "TKIP"
+                elif pairwise_val and cipher == "No disponible":
+                    cipher = pairwise_val.upper()
+            
+            # Buscar group (cifrado de grupo)
+            group_match = re.search(r'802-11-wireless-security.group:(.+)', output)
+            if group_match and cipher == "No disponible":
+                group_val = group_match.group(1).strip()
+                if 'ccmp' in group_val.lower() or 'aes' in group_val.lower():
+                    cipher = "CCMP/AES"
+                elif 'tkip' in group_val.lower():
+                    cipher = "TKIP"
+                elif group_val:
+                    cipher = group_val.upper()
+            
+            # Si es una red abierta
+            if auth == "Abierta" or seguridad == "Abierta":
+                cipher = "Ninguna"
+            
+            return {
+                "seguridad": seguridad,
+                "auth": auth,
+                "cipher": cipher
+            }
+            
+        except Exception as e:
+            print(f"Error en Linux get_akm_security: {e}")
+            return {"seguridad": "Desconocida", "auth": "No disponible", "cipher": "No disponible"}
 
 def detect_akm_security(auth, cipher, output):
     """Detección específica de AKM"""
@@ -501,6 +623,7 @@ def scan_wifi_linux(environment="auto"):
     print("Escaneando WiFi en Linux (nmcli)...")
 
     try:
+        # Obtener lista de redes con más campos
         cmd = [
             "nmcli", "-t",
             "-f", "SSID,BSSID,SIGNAL,FREQ,CHAN,SECURITY",
@@ -537,7 +660,6 @@ def scan_wifi_linux(environment="auto"):
             # Parsear señal (porcentaje a dBm)
             try:
                 signal_percent = int(signal_str)
-                # Usar la misma función que Windows
                 signal_dbm = percentage_to_dbm(signal_percent)
             except:
                 signal_dbm = -100
@@ -574,26 +696,43 @@ def scan_wifi_linux(environment="auto"):
                 except:
                     freq = None
 
-            # Parsear seguridad
-            sec_low = security_raw.lower().strip()
+            # === MEJORA: Obtener información detallada de seguridad ===
             auth = ""
             cipher = ""
-
-            if "wpa3" in sec_low:
-                auth = "WPA3"
-            elif "wpa2" in sec_low:
-                auth = "WPA2"
-            elif "wpa1" in sec_low:
-                auth = "WPA"
-            elif "wep" in sec_low:
-                auth = "WEP"
-            elif any(x in sec_low for x in ["abierta", "open", "none"]):
-                auth = "Abierta"
+            seguridad = "Desconocida"
+            
+            # 1. Primero, intentar obtener del perfil guardado
+            akm_info = get_akm_security(ssid)
+            
+            if akm_info["seguridad"] != "Desconocida":
+                # Usar información del perfil guardado
+                seguridad = akm_info["seguridad"]
+                auth = akm_info["auth"]
+                cipher = akm_info["cipher"]
             else:
-                auth = "Desconocida"
-
-            # Detectar seguridad
-            seguridad = parse_security_corrected(auth, "")
+                # 2. Si no hay perfil, usar la información básica del escaneo
+                sec_low = security_raw.lower().strip()
+                
+                # Detectar autenticación básica
+                if "wpa3" in sec_low:
+                    auth = "WPA3"
+                elif "wpa2" in sec_low:
+                    auth = "WPA2"
+                elif "wpa" in sec_low:
+                    auth = "WPA"
+                elif "wep" in sec_low:
+                    auth = "WEP"
+                elif any(x in sec_low for x in ["abierta", "open", "--"]):
+                    auth = "Abierta"
+                
+                # Intentar detectar cifrado del texto de seguridad
+                if "ccmp" in sec_low or "aes" in sec_low:
+                    cipher = "CCMP/AES"
+                elif "tkip" in sec_low:
+                    cipher = "TKIP"
+                
+                # Determinar seguridad basado en auth
+                seguridad = parse_security_corrected(auth, cipher)
 
             # Crear diccionario con la misma estructura que Windows
             red = {
@@ -606,7 +745,7 @@ def scan_wifi_linux(environment="auto"):
                 "AnchoCanal": infer_channel_width(freq) if freq else "Desconocido",
                 "Seguridad": seguridad,
                 "Autenticación": auth,
-                "Cifrado": cipher,
+                "Cifrado": cipher,  # Ahora sí tendrá valor
                 "Tecnologia": infer_wifi_generation(freq) if freq else "Desconocida"
             }
 
@@ -630,8 +769,9 @@ def scan_wifi_linux(environment="auto"):
 
     except Exception as e:
         print("Error Linux:", e)
+        import traceback
+        traceback.print_exc()
         return []
-
 
 def scan_wifi_windows(environment="auto"):
     print("Escaneando WiFi en Windows (netsh)...")

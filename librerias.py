@@ -28,7 +28,15 @@ DEPENDENCIAS = [
     "wheel",
     "future",
     "speedtest-cli",
-    "qt-material"
+    "qt-material",
+    "python-dotenv",
+    "python-nmap",
+    "netifaces",
+    "scikit-learn",
+    "pandas",
+    "matplotlib",
+    "numpy"
+
 ]
 
 # HERRAMIENTAS DEL SISTEMA para Linux (necesarias para escaneo de dispositivos)
@@ -38,6 +46,7 @@ LINUX_TOOLS = [
     "iproute2",       # Para ip, ss (moderno)
     "arp-scan",       # Escaneo ARP avanzado (opcional)
     "speedtest-cli",
+    ""
 ]
 
 SO = platform.system()
@@ -136,13 +145,13 @@ def instalar_herramientas_linux():
         print("\n✅ Todas las herramientas del sistema ya están instaladas")
         return
     
-    print(f"\n📦 Instalando {len(herramientas_faltantes)} herramientas faltantes...")
+    print(f"\n📦 Instalando {len(herramientas_faltantes)} herramientas faltantes...\n")
     
     # Instalar según gestor de paquetes
     try:
         if gestor in ['apt', 'yum', 'dnf', 'apk']:
             # Actualizar repositorios primero
-            print("🔄 Actualizando repositorios...")
+            print("🔄 Actualizando repositorios...\n")
             if gestor == 'apt':
                 run(f"sudo {comando} update -y")
             elif gestor == 'yum' or gestor == 'dnf':

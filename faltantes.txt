@@ -1,7 +1,9 @@
-* scaner de red (MAC, NOMBRE, ANCHO, AMBIENTE, CANAL....)
-* consulta a la IA
-* Detector de fabricante (liberacon de mac aleatori en espera)
-* Verificador de librerias
-* Dispositivos conectados (con fallas)
-* Trafico de la red (en espera)
-* 
+network/
+│
+├── main.py
+├── ui/
+│   └── main_window.py
+├── core/
+│   ├── scanner.py
+│   ├── monitor.py
+│   └── ai_detector.py

@@ -1,10 +1,14 @@
 import requests
 import time
 import random
-
+from dotenv import load_dotenv
+import os
 # ---------------- Configuración OpenRouter ----------------
-OPENROUTER_API_KEY = "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"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+load_dotenv()
+OPENROUTER_API_KEY = os.getenv("API_KEY")
+OPENROUTER_URL = os.getenv("OPENROUTER")
+'''print("API:", OPENROUTER_API_KEY)
+print("URL:", OPENROUTER_URL)'''
 
 HEADERS = {
     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -16,69 +20,95 @@ HEADERS = {
 # Lista de modelos a probar en orden
 MODELOS = [
     "google/gemini-2.0-flash-exp:free",
-    "anthropic/claude-3-haiku", 
-    "meta-llama/llama-3.3-70b-instruct",
-    "microsoft/wizardlm-2-8x22b:free"
+    "microsoft/wizardlm-2-8x22b:free",
+    "stepfun/step-3.5-flash:free",
+    "arcee-ai/trinity-large-preview:free"
+    
 ]
 
 # Cache simple para evitar consultas repetidas
 _cache = {}
 _CACHE_DURATION = 30  # segundos
 
-def _query_ai(prompt: str, max_retries=2) -> str:
-    """Envía prompt a la API probando diferentes modelos"""
-    
-    # Verificar cache primero
-    cache_key = hash(prompt)
+def _query_tecnologia(prompt: str) -> str:
+    """Consulta directa a OpenRouter sin reintentos"""
+    cache_key = prompt.strip()
+
+    # 🔹 Verificar cache
     if cache_key in _cache:
-        timestamp, response = _cache[cache_key]
+        timestamp, response_cached = _cache[cache_key]
         if time.time() - timestamp < _CACHE_DURATION:
-            return response
-    
-    for intento in range(max_retries):
-        modelo = MODELOS[intento % len(MODELOS)]
+            #print("⚡ Respuesta desde cache")
+            return response_cached
         
-        try:
-            payload = {
-                "model": modelo,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                
-                "temperature": 0.4
-            }
-            
-            # Espera aleatoria entre intentos para evitar rate limits
-            if intento > 0:
-                time.sleep(1 + random.random())
-            
-            response = requests.post(OPENROUTER_URL, headers=HEADERS, json=payload, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "choices" in data and len(data["choices"]) > 0:
-                    message = data["choices"][0].get("message", {})
-                    content = message.get("content", "⚠️ Sin respuesta.").strip()
-                    # Guardar en cache
-                    _cache[cache_key] = (time.time(), content)
-                    return content
-            
-            elif response.status_code == 429:
-                # Rate limit - esperar más tiempo
-                time.sleep(3)
-                continue
-                
-            elif response.status_code == 402:
-                # Sin saldo, probar siguiente modelo
-                continue
-                
-        except requests.exceptions.Timeout:
-            continue
-        except Exception:
-            continue
+    MODELO = "stepfun/step-3.5-flash:free"  # usa uno válido
+
+    payload = {
+        "model": MODELO,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.4
+    }
+
+    try:
+        response = requests.post(
+            OPENROUTER_URL,
+            headers=HEADERS,
+            json=payload,
+            timeout=15
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        else:
+            return f"Error {response.status_code}: {response.text}"
+
+    except Exception as e:
+        return f"Error de conexión: {e}"
     
-    # Si todos los intentos fallan, usar respuestas predefinidas inteligentes
-    return _respuesta_predefinida(prompt)
+
+def _query_Protocolo(prompt: str) -> str:
+    """Consulta directa a OpenRouter sin reintentos"""
+    cache_key = prompt.strip()
+
+    # 🔹 Verificar cache
+    if cache_key in _cache:
+        timestamp, response_cached = _cache[cache_key]
+        if time.time() - timestamp < _CACHE_DURATION:
+            #print("⚡ Respuesta desde cache")
+            return response_cached
+        
+    MODELO = "arcee-ai/trinity-large-preview:free"  # usa uno válido
+
+    payload = {
+        "model": MODELO,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.4
+    }
+
+    try:
+        response = requests.post(
+            OPENROUTER_URL,
+            headers=HEADERS,
+            json=payload,
+            timeout=15
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        else:
+            return f"Error {response.status_code}: {response.text}"
+
+    except Exception as e:
+        return f"Error de conexión: {e}"
+    
+    
+
 
 def _respuesta_predefinida(prompt: str) -> str:
     """Respuestas predefinidas inteligentes cuando la IA no está disponible"""
@@ -101,34 +131,36 @@ def _crear_prompt_protocolo(red_meta: dict) -> str:
 def sugerencia_tecnologia(red_meta: dict) -> str:
     """Obtiene recomendación de tecnología"""
     prompt = _crear_prompt_tecnologia(red_meta)
-    return _query_ai(prompt)
+    return _query_tecnologia(prompt)
 
 def sugerencia_protocolo(red_meta: dict) -> str:
     """Obtiene recomendación de seguridad"""
     prompt = _crear_prompt_protocolo(red_meta)
-    return _query_ai(prompt)
+    return _query_Protocolo(prompt)
 
 # ---------------- Prueba mejorada ----------------
-# if __name__ == "__main__":
-#     print("🚀 VERSIÓN OPTIMIZADA - MÚLTIPLES MODELOS")
-#     print("=" * 45)
+'''if __name__ == "__main__":
+    print("🚀 VERSIÓN OPTIMIZADA - MÚLTIPLES MODELOS")
+    print("=" * 45)
     
-#     red_ejemplo = {
-#         'SSID': 'MiCasa_WiFi_5G',
-#         'Señal': -68,
-#         'Banda': '5 GHz',
-#         'Tecnologia': 'WiFi 5 (802.11ac)',
-#         'Seguridad': 'WPA2-Personal',
-#     }
+    red_ejemplo = {
+         'SSID': 'MiCasa_WiFi_5G',
+         'Señal': -68,
+         'Banda': '5 GHz',
+        'Tecnologia': 'WiFi 5 (802.11ac)',
+         'Seguridad': 'WPA2-Personal',
+     }
     
-#     print(f"\n📡 Modelos disponibles: {len(MODELOS)}")
+    print(f"\n📡 Modelos disponibles: {len(MODELOS)}")
     
-#     print("\n🔧 **TECNOLOGÍA:**")
-#     tech = sugerencia_tecnologia(red_ejemplo)
-#     print(tech)
+    print("\n🔧 **TECNOLOGÍA:**")
+    tech = sugerencia_tecnologia(red_ejemplo)
+    print(tech)
     
-#     print("\n🔐 **SEGURIDAD:**")
-#     seg = sugerencia_protocolo(red_ejemplo)
-#     print(seg)
+    print("\n🔐 **SEGURIDAD:**")
+    seg = sugerencia_protocolo(red_ejemplo)
+    print(seg)
     
-#     print(f"\n💾 Cache: {len(_cache)} entradas")
+    print(f"\n💾 Cache: {len(_cache)} entradas")'''
+
+#Fin

@@ -1,30 +1,12 @@
 """
-ui.py – Punto de entrada principal de EscanerWifi
+vistas/devices_dialog.py – Diálogo de dispositivos conectados con test de velocidad
 """
-# ── 1. stdlib primero ─────────────────────────────────────────────────────
 import sys
 import os
 import subprocess
 import platform
 from typing import Optional, Dict
 
-# ── 2. Rutas del proyecto (ANTES de cualquier import local) ───────────────
-# ui.py vive en EscanerWifi/  (raíz del proyecto)
-# backend/ vive en EscanerWifi/backend/
-# vistas/  vive en EscanerWifi/vistas/
-# network/ vive en EscanerWifi/network/
-_PROJ_ROOT = os.path.abspath(os.path.dirname(__file__))        # ← EscanerWifi/
-_BACKEND   = os.path.join(_PROJ_ROOT, "backend")               # ← EscanerWifi/backend/
-_NETWORK   = os.path.join(_PROJ_ROOT, "network")               # ← EscanerWifi/network/
-for _p in (_PROJ_ROOT, _BACKEND, _NETWORK):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ── 3. Verificar librerias (ahora backend/ ya está en sys.path) ───────────
-from backend.librerias import verificar_librerias
-verificar_librerias()
-
-# ── 4. PyQt6 ─────────────────────────────────────────────────────────────
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout,
     QScrollArea, QGridLayout, QPushButton, QFrame, QDialog,
@@ -32,6 +14,18 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QCursor, QMouseEvent
+
+# ── Rutas del proyecto ────────────────────────────────────────────────────
+# Este archivo vive en EscanerWifi/vistas/
+# El __init__.py de vistas/ ya configura sys.path al importar el paquete.
+# Este bloque es un respaldo por si el archivo se ejecuta directamente.
+_VISTAS_DIR = os.path.abspath(os.path.dirname(__file__))    # EscanerWifi/vistas/
+_PROJ_ROOT  = os.path.dirname(_VISTAS_DIR)                  # EscanerWifi/
+_BACKEND    = os.path.join(_PROJ_ROOT, "backend")           # EscanerWifi/backend/
+_NETWORK    = os.path.join(_PROJ_ROOT, "network")           # EscanerWifi/network/
+for _p in (_PROJ_ROOT, _BACKEND, _NETWORK):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 # ── Imports del backend ───────────────────────────────────────────────────
 from main import scan_wifi
@@ -71,7 +65,7 @@ except ImportError:
                 "wifi_standard": "Desconocido", "confidence": "low"}
 
 # ── NetGuard ──────────────────────────────────────────────────────────────
-# _NETWORK ya fue agregado a sys.path arriba, no hace falta repetirlo
+# _NETWORK ya está en sys.path desde el bloque de rutas arriba
 try:
     from ui_ia.main_window import MainWindow as NetGuardWindow
     NETGUARD_OK = True

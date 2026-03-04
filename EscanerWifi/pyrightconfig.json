@@ -1,0 +1,12 @@
+{
+  "pythonVersion": "3.13",
+  "venvPath": ".",
+  "venv": "venv",
+  "extraPaths": [
+    "backend",
+    "vistas",
+    "network",
+    "network/ui_ia",
+    "network/core"
+  ]
+}

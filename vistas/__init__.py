@@ -1,7 +1,6 @@
 # EscanerWifi/vistas/__init__.py
-# Asegura que la raíz del proyecto y backend/ estén en sys.path
-# para que todos los archivos de vistas/ puedan importar del backend
-# sin importar desde dónde se ejecute el programa.
+# Asegura que raíz, backend/ y network/ estén en sys.path
+# para que todos los módulos de vistas/ usen imports con prefijo explícito.
 import sys
 import os
 

@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QFrame, QScrollArea, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QObject, QMutex
-from PyQt6.QtGui import QTextCursor, QFont, QColor
+from PyQt6.QtGui import QTextCursor, QFont, QColor, QIcon
 
 import sys
 import os
@@ -165,6 +165,7 @@ class ScanHostsWorker(QObject):
         super().__init__()
         self.scanner    = scanner
         self._cancelled = False
+
     def cancel(self): self._cancelled = True
     def run(self):
         try:
@@ -210,6 +211,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title_es if SYSTEM_LANG == "es" else title_en)
         self.setGeometry(60, 40, 1300, 680)
         self.setMinimumSize(1200, 520)
+        self.set_icon()
         self.setStyleSheet(STYLE)
 
         # Modulos
@@ -256,6 +258,11 @@ class MainWindow(QMainWindow):
                 self._txt(f"IA: entrenada ({n} muestras)", f"AI: trained ({n} samples)")
             )
             self.lbl_ai_status.setStyleSheet("QLabel#lbl_info { color:#3fb950; }")
+
+    def set_icon(self):
+            icon_path = os.path.join(os.path.dirname(__file__),"../../img", "wifi.png")
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
 
     def _txt(self, es: str, en: str) -> str:
         return es if SYSTEM_LANG == "es" else en

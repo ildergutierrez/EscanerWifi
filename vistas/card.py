@@ -1,13 +1,23 @@
 """
 vistas/card.py – Tarjeta de red WiFi
 """
+# ── stdlib ────────────────────────────────────────────────────────────────
 import sys
 import os
 import subprocess
 import platform
 from typing import Optional, Dict
 
+# ── Rutas del proyecto ────────────────────────────────────────────────────
+_VISTAS_DIR = os.path.abspath(os.path.dirname(__file__))
+_PROJ_ROOT  = os.path.dirname(_VISTAS_DIR)
+_BACKEND    = os.path.join(_PROJ_ROOT, "backend")
+_NETWORK    = os.path.join(_PROJ_ROOT, "network")
+for _p in (_PROJ_ROOT, _BACKEND, _NETWORK):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
+# ── PyQt6 ─────────────────────────────────────────────────────────────────
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout,
     QScrollArea, QGridLayout, QPushButton, QFrame, QDialog,
@@ -16,33 +26,26 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QCursor, QMouseEvent
 
-# ── Rutas del proyecto ────────────────────────────────────────────────────
-# Este archivo vive en EscanerWifi/vistas/
-# El __init__.py de vistas/ ya configura sys.path al importar el paquete.
-# Este bloque es un respaldo por si el archivo se ejecuta directamente.
-_VISTAS_DIR = os.path.abspath(os.path.dirname(__file__))    # EscanerWifi/vistas/
-_PROJ_ROOT  = os.path.dirname(_VISTAS_DIR)                  # EscanerWifi/
-_BACKEND    = os.path.join(_PROJ_ROOT, "backend")           # EscanerWifi/backend/
-_NETWORK    = os.path.join(_PROJ_ROOT, "network")           # EscanerWifi/network/
-for _p in (_PROJ_ROOT, _BACKEND, _NETWORK):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ── Imports del backend ───────────────────────────────────────────────────
-from main import scan_wifi
-from ai_suggestions import sugerencia_tecnologia, sugerencia_protocolo
-from network_status import (get_connected_wifi_info, is_current_network,
-                             get_network_congestion, is_connected_to_network)
+# ── Imports del backend (prefijo explícito) ───────────────────────────────
+from backend.main import scan_wifi
+from backend.ai_suggestions import sugerencia_tecnologia, sugerencia_protocolo
+from backend.network_status import (
+    get_connected_wifi_info,
+    is_current_network,
+    get_network_congestion,
+    is_connected_to_network,
+    get_current_network_info,
+)
 
 try:
-    from network_speed import test_network_speed
+    from backend.network_speed import test_network_speed
 except ImportError:
     def test_network_speed():
         return {"success": False, "error": "Módulo no disponible",
                 "download_mbps": 0.0, "upload_mbps": 0.0, "ping_ms": 999.0}
 
 try:
-    from vendor_lookup import get_vendor, get_enhanced_vendor_info
+    from backend.vendor_lookup import get_vendor, get_enhanced_vendor_info
 except Exception:
     def get_vendor(_): return "Desconocido"
     def get_enhanced_vendor_info(bssid, ssid=None):
@@ -50,23 +53,20 @@ except Exception:
                 "original_mac": bssid, "original_vendor": "Desconocido"}
 
 try:
-    from ap_device_scanner import get_connected_devices, get_devices_count, get_current_network_info
+    from backend.ap_device_scanner import get_connected_devices, get_devices_count
 except Exception:
     def get_connected_devices(red_info=None):
         return {"success": False, "devices": [], "total_devices": 0,
                 "max_devices": 50, "usage_percentage": 0}
     def get_devices_count(red_info=None): return 0
-    def get_current_network_info(): return None
 
 try:
-    from mac_capacidad import get_router_info
+    from backend.mac_capacidad import get_router_info
 except ImportError:
     def get_router_info(mac: str, wifi_tech: str = "", vendor: str = "") -> Dict:
         return {"model": "No detectado", "max_devices": 50,
                 "wifi_standard": "Desconocido", "confidence": "low"}
 
-# ── NetGuard ──────────────────────────────────────────────────────────────
-# _NETWORK ya está en sys.path desde el bloque de rutas arriba
 try:
     from ui_ia.main_window import MainWindow as NetGuardWindow
     NETGUARD_OK = True
@@ -102,6 +102,11 @@ def signal_color_by_dbm(signal_dbm: Optional[float]) -> str:
     except Exception:
         return COLOR_MUTED
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PEGA AQUÍ EL RESTO DEL CÓDIGO ORIGINAL DE card.py (clase Card y lo demás)
+# Solo se corrigió el bloque de imports de arriba — nada más cambia.
+# ═══════════════════════════════════════════════════════════════════════════
 from vistas.workers import RouterCapacityWorker
 
 class Card(QFrame):

@@ -197,6 +197,25 @@ class ScanPortsWorker(QObject):
             self.finished.emit(ip, [], [], 0, hostname)
 
 
+class DocumentLoaderWorker(QObject):
+    """Worker para cargar documentos en hilo separado sin bloquear la UI."""
+    finished = pyqtSignal(bool, str, str)   # success, message, filename
+
+    def __init__(self, doc_trainer, filepath: str):
+        super().__init__()
+        self.doc_trainer = doc_trainer
+        self.filepath    = filepath
+
+    def run(self):
+        import os
+        fname = os.path.basename(self.filepath)
+        try:
+            success, message = self.doc_trainer.add_document(self.filepath)
+            self.finished.emit(success, message, fname)
+        except Exception as e:
+            self.finished.emit(False, str(e), fname)
+
+
 # =============================================================
 # VENTANA PRINCIPAL
 # =============================================================
@@ -1319,11 +1338,11 @@ class MainWindow(QMainWindow):
     # ==========================================================
 
     def _upload_document(self):
-        filters = "Documentos (*.pdf *.txt *.docx);;PDF (*.pdf);;Texto (*.txt);;Word (*.docx)"
+        filters = "Documentos (*.pdf *.txt *.docx *.md *.csv);;PDF (*.pdf);;Texto (*.txt);;Word (*.docx);;Todos (*.*)"
         filepath, _ = QFileDialog.getOpenFileName(
             self,
-            self._txt("Seleccionar documento de seguridad/redes",
-                      "Select security/network document"),
+            self._txt("Seleccionar documento para entrenar la IA",
+                      "Select document to train the AI"),
             "",
             filters
         )
@@ -1332,17 +1351,36 @@ class MainWindow(QMainWindow):
 
         fname = os.path.basename(filepath)
         self._doc_log(self._txt(
-            f"Procesando: {fname}...",
-            f"Processing: {fname}..."
+            f"Cargando: {fname}  (procesando en segundo plano...)",
+            f"Loading: {fname}  (processing in background...)"
         ), "#58a6ff")
-        QApplication.processEvents()
 
-        success, message = self.doc_trainer.add_document(filepath)
+        # Deshabilitar boton mientras carga
+        self.btn_upload_doc.setEnabled(False)
+        self.btn_upload_doc.setText(self._txt("Cargando...", "Loading..."))
+
+        # Crear worker + hilo para no bloquear la UI
+        self._doc_thread = QThread()
+        self._doc_worker = DocumentLoaderWorker(self.doc_trainer, filepath)
+        self._doc_worker.moveToThread(self._doc_thread)
+
+        self._doc_thread.started.connect(self._doc_worker.run)
+        self._doc_worker.finished.connect(self._on_document_loaded)
+        self._doc_worker.finished.connect(self._doc_thread.quit)
+        self._doc_worker.finished.connect(self._doc_worker.deleteLater)
+        self._doc_thread.finished.connect(self._doc_thread.deleteLater)
+
+        self._doc_thread.start()
+
+    def _on_document_loaded(self, success: bool, message: str, fname: str):
+        """Callback cuando el hilo de carga termina. Siempre corre en el hilo de UI."""
+        # Re-habilitar boton
+        self.btn_upload_doc.setEnabled(True)
+        self.btn_upload_doc.setText(self._txt("+ Subir documento", "+ Upload document"))
 
         if success:
             self._doc_log(f"OK: {message}", "#3fb950")
             self._refresh_doc_table()
-            # Informar al chatbot
             self._chat_sys(self._txt(
                 f"Nuevo documento agregado a mi conocimiento: {fname}\n"
                 "Ahora puedo responder preguntas usando la informacion de ese documento.",
@@ -1350,24 +1388,14 @@ class MainWindow(QMainWindow):
                 "I can now answer questions using the information from that document."
             ))
         else:
-            self._doc_log(self._txt(f"RECHAZADO: {message}", f"REJECTED: {message}"), "#f85149")
-            # Mostrar mensaje al usuario
-            if SYSTEM_LANG == "es":
-                detail = (
-                    "El documento fue rechazado porque no contiene suficiente informacion "
-                    "relacionada con redes o seguridad informatica.\n\n"
-                    f"Motivo: {message}"
-                )
-            else:
-                detail = (
-                    "The document was rejected because it does not contain enough information "
-                    "related to networks or computer security.\n\n"
-                    f"Reason: {message}"
-                )
+            self._doc_log(self._txt(
+                f"ERROR al cargar '{fname}': {message}",
+                f"ERROR loading '{fname}': {message}"
+            ), "#f85149")
             QMessageBox.warning(
                 self,
-                self._txt("Documento rechazado", "Document rejected"),
-                detail
+                self._txt("Error al cargar documento", "Error loading document"),
+                f"{fname}\n\n{message}"
             )
 
     def _remove_selected_doc(self):

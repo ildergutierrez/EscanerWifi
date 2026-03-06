@@ -36,7 +36,10 @@ DEPENDENCIAS = [
     "scikit-learn",
     "pandas",
     "matplotlib",
-    "numpy"
+    "numpy",
+    "scikit-learn numpy",
+    "pdfplumber", "PyMuPDF", "reportlab", "fpdf", "weasyprint", 
+    "pypdf", "PyPDF2", "python-docx"
 ]
 
 LINUX_TOOLS = [

@@ -25,7 +25,7 @@ for _p in (_PROJ_ROOT, _BACKEND, _NETWORK, _VISTAS):
 # FIX: import explícito con prefijo de paquete para evitar colisión con
 #      cualquier "librerias.py" flotante en sys.path.
 from backend.librerias import verificar_librerias
-#verificar_librerias()
+verificar_librerias()
 
 # ── 4. PyQt6 ─────────────────────────────────────────────────────────────
 from PyQt6.QtWidgets import (

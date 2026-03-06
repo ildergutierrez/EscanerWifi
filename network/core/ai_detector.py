@@ -31,16 +31,36 @@ try:
 except ImportError:
     SKLEARN_OK = False
 
-# PDF
+# PDF - múltiples backends, el primero que funcione gana
+PDF_BACKEND = None
 try:
-    import PyPDF2
-    PDF_OK = True
+    import pdfplumber
+    PDF_BACKEND = "pdfplumber"
 except ImportError:
+    pass
+
+if not PDF_BACKEND:
     try:
-        import pypdf as PyPDF2
-        PDF_OK = True
+        import fitz  # PyMuPDF
+        PDF_BACKEND = "fitz"
     except ImportError:
-        PDF_OK = False
+        pass
+
+if not PDF_BACKEND:
+    try:
+        import pypdf as _pypdf
+        PDF_BACKEND = "pypdf"
+    except ImportError:
+        pass
+
+if not PDF_BACKEND:
+    try:
+        import PyPDF2 as _pypdf
+        PDF_BACKEND = "pypdf"
+    except ImportError:
+        pass
+
+PDF_OK = PDF_BACKEND is not None
 
 # DOCX
 try:
@@ -606,18 +626,62 @@ QA_KNOWLEDGE = [
 
 # Palabras clave para validar documentos
 SECURITY_KEYWORDS = set([
-    "red", "redes", "seguridad", "ciberseguridad", "firewall", "puerto", "protocolo",
-    "vulnerabilidad", "ataque", "malware", "virus", "cifrado", "vpn", "router",
-    "switch", "ip", "tcp", "udp", "dns", "http", "https", "ssh", "ftp", "smtp",
-    "proxy", "intrusion", "ids", "ips", "siem", "nmap", "escaneo", "pentesting",
-    "hacker", "exploit", "phishing", "ransomware", "ddos", "botnet", "autenticacion",
-    "contrasena", "certificado", "ssl", "tls", "wifi", "wireless", "lan", "wan",
-    "servidor", "host", "dominio", "subred", "packet", "paquete", "bandwidth",
-    "network", "security", "cybersecurity", "port", "encryption", "scan",
-    "authentication", "password", "credential", "breach", "threat", "defense",
-    "intrusion", "detection", "prevention", "monitoring", "access", "control",
-    "patch", "update", "vulnerability", "exploit", "payload", "lateral",
-    "privilege", "escalation", "exfiltration", "persistence", "reconnaissance",
+    # === ESPAÑOL - Redes generales ===
+    "red", "redes", "protocolo", "router", "switch", "hub", "servidor", "host",
+    "dominio", "subred", "mascara", "gateway", "puerta", "enlace", "nodo",
+    "topologia", "infraestructura", "interfaz", "adaptador", "cable", "fibra",
+    "ethernet", "conector", "medio", "transmision", "latencia", "ancho",
+    "banda", "throughput", "paquete", "trama", "segmento", "datagrama",
+    "encapsulacion", "encaminamiento", "enrutamiento", "conmutacion",
+    # === ESPAÑOL - Redes inalámbricas ===
+    "inalambrica", "inalambrico", "wifi", "wireless", "wlan", "ssid", "bssid",
+    "antena", "frecuencia", "canal", "cobertura", "punto", "acceso", "ap",
+    "wpa", "wpa2", "wpa3", "wep", "psk", "eap", "radius", "autenticacion",
+    "asociacion", "beacon", "espectro", "ghz", "mhz", "banda", "mimo",
+    "ofdm", "802.11", "bluetooth", "zigbee", "celular", "lte", "5g", "4g",
+    # === ESPAÑOL - Protocolos y capas ===
+    "tcp", "udp", "ip", "ipv4", "ipv6", "icmp", "arp", "rarp", "dhcp",
+    "dns", "http", "https", "ftp", "sftp", "smtp", "pop", "imap", "snmp",
+    "ntp", "telnet", "ssh", "rdp", "sip", "voip", "ospf", "rip", "bgp",
+    "eigrp", "vlan", "nat", "pat", "acl", "qos", "mpls", "ppp", "frame",
+    # === ESPAÑOL - Seguridad ===
+    "seguridad", "ciberseguridad", "firewall", "puerto", "vulnerabilidad",
+    "ataque", "malware", "virus", "cifrado", "vpn", "proxy", "intrusion",
+    "ids", "ips", "siem", "nmap", "escaneo", "pentesting", "hacker",
+    "exploit", "phishing", "ransomware", "ddos", "botnet", "contrasena",
+    "certificado", "ssl", "tls", "wan", "clave", "llave", "criptografia",
+    "hash", "firma", "digital", "rsa", "aes", "ipsec", "pkc", "pki",
+    "token", "biometria", "mfa", "2fa", "perimetro", "desmilitarizada",
+    "dmz", "honeypot", "sandbox", "forensico", "incidente", "amenaza",
+    "riesgo", "parche", "actualizacion", "politica", "cumplimiento",
+    "auditoria", "log", "registro", "monitoreo", "disponibilidad",
+    "integridad", "confidencialidad", "triada", "zero", "confianza",
+    # === INGLÉS - General networking ===
+    "network", "networking", "router", "switch", "gateway", "subnet", "mask",
+    "topology", "infrastructure", "interface", "adapter", "cable", "fiber",
+    "ethernet", "transmission", "latency", "bandwidth", "throughput",
+    "packet", "frame", "segment", "datagram", "encapsulation", "routing",
+    "switching", "node", "hub", "backbone", "link", "layer",
+    # === INGLÉS - Wireless ===
+    "wireless", "wifi", "wlan", "ssid", "antenna", "frequency", "channel",
+    "coverage", "access point", "wpa", "wpa2", "wpa3", "wep", "beacon",
+    "spectrum", "mimo", "ofdm", "bluetooth", "cellular", "mobile",
+    # === INGLÉS - Protocols ===
+    "tcp", "udp", "ipv4", "ipv6", "icmp", "arp", "dhcp", "dns", "http",
+    "https", "ftp", "smtp", "ssh", "rdp", "ospf", "bgp", "rip", "vlan",
+    "nat", "acl", "qos", "mpls", "snmp", "ntp", "sip", "voip",
+    # === INGLÉS - Security ===
+    "security", "cybersecurity", "firewall", "port", "vulnerability",
+    "encryption", "scan", "authentication", "password", "credential",
+    "breach", "threat", "defense", "intrusion", "detection", "prevention",
+    "monitoring", "access", "control", "patch", "update", "exploit",
+    "payload", "lateral", "privilege", "escalation", "exfiltration",
+    "persistence", "reconnaissance", "malware", "ransomware", "phishing",
+    "ddos", "botnet", "ssl", "tls", "vpn", "ipsec", "certificate",
+    "cryptography", "hash", "digital", "signature", "rsa", "aes", "pki",
+    "mfa", "honeypot", "sandbox", "forensic", "incident", "compliance",
+    "audit", "log", "monitoring", "confidentiality", "integrity",
+    "availability", "zero trust", "dmz", "siem", "ids", "ips",
 ])
 
 
@@ -894,55 +958,126 @@ class DocumentTrainer:
 
     def extract_text(self, filepath: str) -> str:
         ext = Path(filepath).suffix.lower()
+
         if ext == ".pdf":
-            if not PDF_OK: return ""
+            # Intentar todos los backends disponibles
             text = ""
-            try:
-                with open(filepath, "rb") as f:
-                    reader = PyPDF2.PdfReader(f)
-                    for page in reader.pages:
-                        try: text += page.extract_text() or ""
+
+            if PDF_BACKEND == "pdfplumber":
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(filepath) as pdf:
+                        for page in pdf.pages:
+                            try: text += (page.extract_text() or "") + "\n"
+                            except: pass
+                except Exception as e:
+                    print(f"pdfplumber error: {e}")
+
+            elif PDF_BACKEND == "fitz":
+                try:
+                    import fitz
+                    doc = fitz.open(filepath)
+                    for page in doc:
+                        try: text += page.get_text() + "\n"
                         except: pass
-            except Exception: pass
-            return text
+                    doc.close()
+                except Exception as e:
+                    print(f"PyMuPDF error: {e}")
+
+            elif PDF_BACKEND == "pypdf":
+                try:
+                    with open(filepath, "rb") as f:
+                        reader = _pypdf.PdfReader(f)
+                        for page in reader.pages:
+                            try: text += (page.extract_text() or "") + "\n"
+                            except: pass
+                except Exception as e:
+                    print(f"pypdf error: {e}")
+
+            # Si aun vacio, leer bytes crudos buscando texto ASCII (ultimo recurso)
+            if not text.strip():
+                try:
+                    with open(filepath, "rb") as f:
+                        raw = f.read()
+                    import re as _re
+                    chunks = _re.findall(rb'[\x20-\x7E]{4,}', raw)
+                    text = " ".join(c.decode("ascii", errors="ignore") for c in chunks)
+                    print("Usando extraccion de texto crudo (fallback)")
+                except Exception as e:
+                    print(f"Fallback crudo error: {e}")
+
+            return text.strip()
+
         elif ext == ".txt":
+            for enc in ("utf-8", "latin-1", "cp1252", "utf-16"):
+                try:
+                    with open(filepath, "r", encoding=enc, errors="ignore") as f:
+                        return f.read()
+                except: pass
+            return ""
+
+        elif ext == ".docx":
+            if DOCX_OK:
+                try:
+                    doc = docx.Document(filepath)
+                    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                except: pass
+            # fallback: leer XML interno del docx (es un ZIP)
             try:
-                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                    return f.read()
+                import zipfile, xml.etree.ElementTree as ET
+                with zipfile.ZipFile(filepath) as z:
+                    with z.open("word/document.xml") as xf:
+                        tree = ET.parse(xf)
+                ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                return " ".join(n.text or "" for n in tree.iter(f"{ns}t") if n.text)
             except: return ""
-        elif ext == ".docx" and DOCX_OK:
-            try:
-                doc = docx.Document(filepath)
-                return "\n".join(p.text for p in doc.paragraphs)
-            except: return ""
+
+        elif ext in (".md", ".rst", ".csv", ".log", ".ini", ".conf", ".yaml", ".yml", ".json"):
+            for enc in ("utf-8", "latin-1", "cp1252"):
+                try:
+                    with open(filepath, "r", encoding=enc, errors="ignore") as f:
+                        return f.read()
+                except: pass
+            return ""
+
         return ""
 
     def validate_document(self, text: str) -> tuple:
+        """Solo verifica que el documento tenga contenido legible. Sin restriccion de tema."""
         lang = SYSTEM_LANG
-        if not text or len(text.strip()) < 100:
+        if not text or len(text.strip()) < 50:
             return False, 0.0, t("doc_empty")
+        # Calcular relevancia informativa (solo para mostrar, no para rechazar)
         words = re.findall(r'\b\w+\b', text.lower())
         if not words:
             return False, 0.0, t("doc_empty")
         hits  = sum(1 for w in words if w in SECURITY_KEYWORDS)
-        score = hits / len(words)
-        if score < 0.015:
-            msg = (f"{t('doc_invalid')} ({score*100:.1f}% relevancia). "
-                   f"Se requieren terminos de redes/seguridad." if lang=="es" else
-                   f"{t('doc_invalid')} ({score*100:.1f}% relevance). "
-                   f"Network/security terms required.")
-            return False, score, msg
-        msg = (f"{t('doc_valid')} ({score*100:.1f}% relevancia)." if lang=="es"
-               else f"{t('doc_valid')} ({score*100:.1f}% relevance).")
+        score = hits / len(words) if words else 0.0
+        msg = (f"{t('doc_valid')} ({score*100:.1f}% relevancia temas red/seguridad)." if lang=="es"
+               else f"{t('doc_valid')} ({score*100:.1f}% network/security relevance).")
         return True, score, msg
 
     def add_document(self, filepath: str) -> tuple:
-        text = self.extract_text(filepath)
-        if not text:
+        ext = Path(filepath).suffix.lower()
+        supported = (".pdf", ".txt", ".docx", ".md", ".rst", ".csv",
+                     ".log", ".ini", ".conf", ".yaml", ".yml", ".json")
+        if ext not in supported:
+            lang = SYSTEM_LANG
             return False, (
-                "No se pudo leer el documento. Verifica que no este danado." if SYSTEM_LANG=="es"
-                else "Could not read document. Check it's not corrupted."
+                f"Formato '{ext}' no soportado. Usa: {', '.join(supported)}" if lang=="es"
+                else f"Format '{ext}' not supported. Use: {', '.join(supported)}"
             )
+
+        text = self.extract_text(filepath)
+        if not text or len(text.strip()) < 50:
+            lang = SYSTEM_LANG
+            tip = (" (Si es PDF escaneado/imagen, instala pdfplumber: pip install pdfplumber)"
+                   if ext == ".pdf" else "")
+            return False, (
+                f"No se pudo extraer texto del documento.{tip}" if lang=="es"
+                else f"Could not extract text from document.{tip}"
+            )
+
         valid, score, reason = self.validate_document(text)
         if not valid:
             return False, reason
@@ -960,42 +1095,81 @@ class DocumentTrainer:
         self._rebuild_index()
         self._save()
 
-        msg = (f"'{filename}' agregado ({score*100:.1f}% relevancia, {len(text):,} caracteres)."
-               if SYSTEM_LANG=="es"
-               else f"'{filename}' added ({score*100:.1f}% relevance, {len(text):,} chars).")
+        lang = SYSTEM_LANG
+        msg = (f"'{filename}' agregado correctamente ({len(text):,} caracteres, {score*100:.1f}% relevancia red/seg)."
+               if lang=="es"
+               else f"'{filename}' added successfully ({len(text):,} chars, {score*100:.1f}% network/sec relevance).")
         return True, msg
 
     def _rebuild_index(self):
-        if not SKLEARN_OK or not self.documents: return
-        try:
-            self.doc_texts   = [v["text"]     for v in self.documents.values()]
-            self.doc_names   = [v["filename"] for v in self.documents.values()]
-            self.vectorizer  = TfidfVectorizer(max_features=5000, ngram_range=(1,2), min_df=1)
-            self.doc_vectors = self.vectorizer.fit_transform(self.doc_texts)
-        except Exception as e:
-            print(f"Error reconstruyendo indice: {e}")
+        if not self.documents:
+            return
+        self.doc_texts = [v["text"]     for v in self.documents.values()]
+        self.doc_names = [v["filename"] for v in self.documents.values()]
+        if SKLEARN_OK:
+            try:
+                self.vectorizer  = TfidfVectorizer(max_features=5000, ngram_range=(1,2), min_df=1)
+                self.doc_vectors = self.vectorizer.fit_transform(self.doc_texts)
+            except Exception as e:
+                print(f"Error reconstruyendo indice TF-IDF: {e}")
+                self.vectorizer  = None
+                self.doc_vectors = None
+        # Si no hay sklearn, doc_texts y doc_names ya están listos para búsqueda simple
 
     def search(self, query: str, top_k: int = 3) -> list:
-        if not SKLEARN_OK or self.doc_vectors is None or not self.doc_texts:
+        if not self.doc_texts:
             return []
-        try:
-            q_vec  = self.vectorizer.transform([query])
-            scores = cosine_similarity(q_vec, self.doc_vectors).flatten()
-            top_idx = scores.argsort()[::-1][:top_k]
-            results = []
-            for idx in top_idx:
-                if scores[idx] > 0.01:
-                    text = self.doc_texts[idx]
-                    pos  = 0
-                    for w in query.lower().split():
-                        p = text.lower().find(w)
-                        if p >= 0: pos = p; break
-                    start    = max(0, pos - 100)
-                    fragment = text[start: start + 350].strip()
-                    results.append((self.doc_names[idx], fragment))
-            return results
-        except Exception:
+
+        # Búsqueda con TF-IDF (sklearn disponible)
+        if SKLEARN_OK and self.doc_vectors is not None and self.vectorizer is not None:
+            try:
+                q_vec  = self.vectorizer.transform([query])
+                scores = cosine_similarity(q_vec, self.doc_vectors).flatten()
+                top_idx = scores.argsort()[::-1][:top_k]
+                results = []
+                for idx in top_idx:
+                    if scores[idx] > 0.01:
+                        fragment = self._extract_fragment(self.doc_texts[idx], query)
+                        results.append((self.doc_names[idx], fragment))
+                return results
+            except Exception:
+                pass  # fallback a búsqueda simple
+
+        # Búsqueda simple por palabras clave (sin sklearn)
+        query_words = [w.lower() for w in query.split() if len(w) > 2]
+        if not query_words:
             return []
+
+        scored = []
+        for i, text in enumerate(self.doc_texts):
+            tl = text.lower()
+            hits = sum(tl.count(w) for w in query_words)
+            if hits > 0:
+                scored.append((hits, i))
+
+        scored.sort(reverse=True)
+        results = []
+        for _, idx in scored[:top_k]:
+            fragment = self._extract_fragment(self.doc_texts[idx], query)
+            results.append((self.doc_names[idx], fragment))
+        return results
+
+    def _extract_fragment(self, text: str, query: str, length: int = 400) -> str:
+        """Extrae el fragmento más relevante del texto para la consulta."""
+        tl = text.lower()
+        best_pos = 0
+        for word in query.lower().split():
+            if len(word) > 2:
+                p = tl.find(word)
+                if p >= 0:
+                    best_pos = p
+                    break
+        start    = max(0, best_pos - 100)
+        fragment = text[start: start + length].strip()
+        # Limpiar espacios múltiples y saltos excesivos
+        fragment = re.sub(r'\n{3,}', '\n\n', fragment)
+        fragment = re.sub(r'[ \t]{2,}', ' ', fragment)
+        return fragment
 
     def list_documents(self) -> list:
         return [{"filename": v["filename"], "date": v["date"][:10],

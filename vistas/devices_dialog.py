@@ -223,7 +223,7 @@ class DevicesDialog(QDialog):
         self._load_router_capacity()
 
     def set_icon(self):
-        icon_path = os.path.join(os.path.dirname(__file__), "wifi.png")
+        icon_path = os.path.join(os.path.dirname(__file__),"../img" ,"wifi.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 

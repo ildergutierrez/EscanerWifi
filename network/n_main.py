@@ -6,13 +6,13 @@ n_main.py  –  NetGuard · Punto de entrada principal
 
 import sys
 import os
-
-'''BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+'''
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 
 # Verificar librerias (el modulo librerias.py vive en el paquete principal)
 try:
-    from librerias import verificar_librerias
+    from backend.librerias import verificar_librerias
     verificar_librerias()
     print("Librerias verificadas correctamente")
 except ImportError:

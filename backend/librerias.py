@@ -13,6 +13,7 @@ import os
 #  LIBRERÍAS REQUERIDAS
 # -------------------------------------------------------
 DEPENDENCIAS = [
+    
     "PyQt6",
     "scapy",
     "requests",
